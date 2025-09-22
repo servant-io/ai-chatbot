@@ -312,10 +312,10 @@ export const EditAgentForm = forwardRef<
               'text/plain': ['.txt'],
             }}
             validator={(file) => {
-              if (file.name.length > 63) {
+              if (file.name.length > 64) {
                 return {
                   code: 'filename-too-long',
-                  message: `Filename "${file.name}" is too long (${file.name.length} characters). Maximum allowed is 63 characters.`,
+                  message: `Filename "${file.name}" is too long (${file.name.length} characters). Maximum allowed is 64 characters.`,
                 };
               }
               return null;
