@@ -211,7 +211,7 @@ export const EditAgentForm = forwardRef<
 
   useImperativeHandle(ref, () => ({
     submit: handleSubmit,
-    isSubmitting: isSubmitting || isUploadingKnowledge,
+    isSubmitting, // Only form submitting
   }));
 
   return (

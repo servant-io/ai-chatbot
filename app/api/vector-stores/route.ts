@@ -158,7 +158,7 @@ export async function POST(request: Request) {
           { headers: OPENAI_BETA_HEADER },
         );
 
-        const vectorStoreFile = await openai.vectorStores.files.createAndPoll(
+        const vectorStoreFile = await openai.vectorStores.files.create(
           vectorStoreId,
           {
             file_id: uploadedFile.id,
@@ -170,7 +170,6 @@ export async function POST(request: Request) {
           },
           {
             headers: OPENAI_BETA_HEADER,
-            pollIntervalMs: 2000,
           },
         );
 
@@ -212,7 +211,7 @@ export async function POST(request: Request) {
         uploadedSummaries.push({
           id: vectorStoreFile.id,
           name: inferredName,
-          status: vectorStoreFile.status,
+          status: vectorStoreFile.status, // Will be 'in_progress' initially
           size: file.size,
         });
       }

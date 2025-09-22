@@ -59,6 +59,7 @@ export function Chat({
     agentName: string;
     agentDescription?: string;
     agentPrompt?: string;
+    vectorStoreId?: string;
   } | null;
 }) {
   const params = useSearchParams();
@@ -83,6 +84,7 @@ export function Chat({
     agentName: string;
     agentDescription?: string;
     agentPrompt?: string;
+    vectorStoreId?: string;
   } | null>(initialAgentContext || null);
 
   const [storedActiveTools, setStoredActiveTools] = useLocalStorage<
@@ -222,7 +224,10 @@ export function Chat({
         if (response.ok) {
           const data = await response.json();
           if (data) {
-            setAgentContext(data);
+            setAgentContext({
+              ...data,
+              vectorStoreId: data.vectorStoreId, // if added
+            });
           }
         }
       } catch (error) {

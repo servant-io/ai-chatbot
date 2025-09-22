@@ -32,6 +32,7 @@ export async function GET(
         agentName: chatData.agent.name,
         agentDescription: chatData.agent.description,
         agentPrompt: chatData.agent.agentPrompt,
+        vectorStoreId: chatData.agent.vectorStoreId,
       });
     }
 

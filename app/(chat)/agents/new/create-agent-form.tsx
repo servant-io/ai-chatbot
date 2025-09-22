@@ -152,7 +152,7 @@ export const CreateAgentForm = forwardRef<
 
   useImperativeHandle(ref, () => ({
     submit: handleSubmit,
-    isSubmitting: isSubmitting || isUploadingKnowledge,
+    isSubmitting,
   }));
 
   return (
@@ -283,7 +283,9 @@ export const CreateAgentForm = forwardRef<
                   <li key={file.id} className="truncate">
                     {file.name}
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {file.status}
+                      {file.status === 'in_progress'
+                        ? 'Creating embeddings...'
+                        : file.status}
                     </span>
                   </li>
                 ))}
@@ -301,6 +303,12 @@ export const CreateAgentForm = forwardRef<
                 vector store.
               </p>
             </div>
+          )}
+          {uploadedKnowledge.some((f) => f.status === 'in_progress') && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Processing may take a few minutes. You can create the agent now;
+              files will be available shortly.
+            </p>
           )}
         </div>
       </form>
