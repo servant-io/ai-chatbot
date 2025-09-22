@@ -17,7 +17,7 @@ export interface CreateAgentFormHandle {
   isSubmitting: boolean;
 }
 
-interface CreateAgentFormState {
+export interface CreateAgentFormState {
   name: string;
   description: string;
   agentPrompt: string;

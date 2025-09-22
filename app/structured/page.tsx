@@ -16,7 +16,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { SchemaDefinition } from './types';
 
-type StructuredResult = unknown;
+type StructuredResult = any;
 
 const DEFAULT_SCHEMA: SchemaDefinition = {
   outputType: 'object',
@@ -44,7 +44,7 @@ export default function StructuredPage() {
   const [maxTokens, setMaxTokens] = useState(400);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<StructuredResult | null>(null);
+  const [result, setResult] = useState<any | null>(null);
 
   const cleanedSchema = useMemo(() => {
     const properties = schemaDefinition.properties

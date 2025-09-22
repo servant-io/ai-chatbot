@@ -4,7 +4,11 @@ import { useRef, useState } from 'react';
 import type { Agent } from '@/lib/db/schema';
 import { AgentPreview } from '../../new/agent-preview';
 import { EditAgentHeader } from './edit-agent-header';
-import { EditAgentForm, type EditAgentFormHandle } from './edit-agent-form';
+import {
+  EditAgentForm,
+  type EditAgentFormHandle,
+  type EditAgentFormState,
+} from './edit-agent-form';
 
 interface AuthUser {
   id: string;
@@ -21,7 +25,7 @@ interface EditAgentPageClientProps {
 
 export function EditAgentPageClient({ agent, user }: EditAgentPageClientProps) {
   const formRef = useRef<EditAgentFormHandle>(null);
-  const [formData, setFormData] = useState(() => ({
+  const [formData, setFormData] = useState<EditAgentFormState>(() => ({
     name: agent.name,
     description: agent.description ?? '',
     agentPrompt: agent.agentPrompt ?? '',

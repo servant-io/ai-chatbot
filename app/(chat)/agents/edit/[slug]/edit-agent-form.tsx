@@ -25,12 +25,12 @@ export interface EditAgentFormHandle {
   isSubmitting: boolean;
 }
 
-interface EditAgentFormState {
+export interface EditAgentFormState {
   name: string;
   description: string;
   agentPrompt: string;
   isPublic: boolean;
-  vectorStoreId?: string | null;
+  vectorStoreId?: string | undefined;
 }
 
 interface EditAgentFormProps {
