@@ -85,6 +85,7 @@ export default async function Page(props: {
         agentName: agentRow.name,
         agentDescription: agentRow.description ?? undefined,
         agentPrompt: agentRow.agentPrompt ?? undefined,
+        vectorStoreId: agentRow.vectorStoreId ?? undefined,
       };
     } catch (_) {
       return null;

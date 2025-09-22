@@ -48,8 +48,6 @@ export async function POST(req: Request) {
     const {
       prompt,
       schemaDefinition,
-      temperature = 0.2,
-      maxTokens = 400,
     } = requestSchema.parse(body);
 
     const schema = buildZodSchema(schemaDefinition);
@@ -58,26 +56,21 @@ export async function POST(req: Request) {
     const response = await generateObject({
       model,
       messages: [{ role: 'user', content: prompt }],
-      temperature,
-      maxTokens,
       ...(schemaDefinition.outputType === 'array'
         ? { output: 'array' as const, schema }
         : { schema }),
     });
 
-    return new Response(
-      JSON.stringify({ result: response.object }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      },
-    );
+    return new Response(JSON.stringify({ result: response.object }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return new Response(
         JSON.stringify({
           error: 'Invalid request payload',
-          details: error.errors,
+          details: error.issues,
         }),
         { status: 400 },
       );

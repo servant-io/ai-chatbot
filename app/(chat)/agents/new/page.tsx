@@ -5,6 +5,7 @@ import { useAuth } from '@workos-inc/authkit-nextjs/components';
 import {
   CreateAgentForm,
   type CreateAgentFormHandle,
+  type CreateAgentFormState,
 } from './create-agent-form';
 import { CreateAgentHeader } from './create-agent-header';
 import { AgentPreview } from './agent-preview';
@@ -12,11 +13,12 @@ import { AgentPreview } from './agent-preview';
 export default function NewAgentPage() {
   const formRef = useRef<CreateAgentFormHandle>(null);
   const { user, loading } = useAuth({ ensureSignedIn: true });
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CreateAgentFormState>({
     name: '',
     description: '',
     agentPrompt: '',
     isPublic: true,
+    vectorStoreId: undefined,
   });
 
   if (loading) {

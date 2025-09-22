@@ -16,7 +16,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { SchemaDefinition } from './types';
 
-type StructuredResult = unknown;
+type StructuredResult = any;
 
 const DEFAULT_SCHEMA: SchemaDefinition = {
   outputType: 'object',
@@ -35,9 +35,8 @@ const DEFAULT_SCHEMA: SchemaDefinition = {
 };
 
 export default function StructuredPage() {
-  const [schemaDefinition, setSchemaDefinition] = useState<SchemaDefinition>(
-    DEFAULT_SCHEMA,
-  );
+  const [schemaDefinition, setSchemaDefinition] =
+    useState<SchemaDefinition>(DEFAULT_SCHEMA);
   const [prompt, setPrompt] = useState(
     'Summarize the latest Servant AI launch update with three bullet points.',
   );
@@ -45,7 +44,7 @@ export default function StructuredPage() {
   const [maxTokens, setMaxTokens] = useState(400);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<StructuredResult | null>(null);
+  const [result, setResult] = useState<any | null>(null);
 
   const cleanedSchema = useMemo(() => {
     const properties = schemaDefinition.properties
@@ -113,9 +112,7 @@ export default function StructuredPage() {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
       <div className="space-y-2">
-        <h1 className="text-3xl font-semibold">
-          Structured Object Playground
-        </h1>
+        <h1 className="text-3xl font-semibold">Structured Object Playground</h1>
         <p className="text-sm text-muted-foreground">
           Define a schema, send a prompt, and inspect the exact object returned
           by <code>generateObject</code>.
@@ -207,9 +204,7 @@ export default function StructuredPage() {
                 <Button type="submit" disabled={isGenerating}>
                   {isGenerating ? 'Generating…' : 'Generate structured output'}
                 </Button>
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
 
               {result && (
