@@ -4,6 +4,7 @@ import { CrossSmallIcon } from './icons';
 import { Button } from './ui/button';
 import Image from 'next/image';
 import { FileText } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export const PreviewAttachment = ({
   attachment,
@@ -23,7 +24,10 @@ export const PreviewAttachment = ({
   return (
     <div
       data-testid="input-attachment-preview"
-      className="group relative size-16 rounded-lg overflow-hidden bg-muted border"
+      className={cn(
+        'group relative size-16 rounded-lg overflow-hidden border bg-muted',
+        isPdf && 'bg-white border-[#E4413C]/30',
+      )}
     >
       {isImage ? (
         <Image
@@ -34,10 +38,20 @@ export const PreviewAttachment = ({
           height={64}
         />
       ) : (
-        <div className="size-full flex flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground bg-muted/80">
-          <FileText className="size-4" aria-hidden="true" />
-          <span className="font-medium uppercase tracking-wide">
-            {isPdf ? 'PDF' : 'FILE'}
+        <div
+          className={cn(
+            'size-full flex flex-col items-center justify-center gap-1 text-[10px] bg-muted/80 text-muted-foreground',
+            isPdf && 'bg-white text-muted-foreground',
+          )}
+        >
+          <span
+            className={cn(
+              'flex flex-col items-center justify-center gap-1 rounded-md px-3 pt-2 pb-1',
+              isPdf && 'bg-[#E4413C] text-white',
+            )}
+          >
+            <FileText className="size-4" aria-hidden="true" />
+            <span className="uppercase tracking-wide">PDF</span>
           </span>
         </div>
       )}
@@ -62,7 +76,12 @@ export const PreviewAttachment = ({
         </Button>
       )}
 
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] px-1 py-0.5 truncate">
+      <div
+        className={cn(
+          'absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] px-1 py-0.5 truncate',
+          isPdf && 'from-black/70',
+        )}
+      >
         {name}
       </div>
     </div>
