@@ -179,7 +179,6 @@ export async function POST(request: Request) {
     const messagesFromDb = await getMessagesByChatId({ id });
     const uiMessages = [...convertToUIMessages(messagesFromDb), message];
 
-
     const { longitude, latitude, city, country } = geolocation(request);
 
     const requestHints: RequestHints = {
@@ -312,7 +311,7 @@ export async function POST(request: Request) {
         tools.file_search = openai.tools.fileSearch(
           resolvedVectorStoreId
             ? { vectorStoreIds: [resolvedVectorStoreId] }
-            : {},
+            : { vectorStoreIds: [] },
         );
         tools.get_file_contents = getFileContents({
           session: aiToolsSession,
@@ -377,7 +376,6 @@ export async function POST(request: Request) {
           reasoningSummary: 'auto',
           include: ['reasoning.encrypted_content', 'file_search_call.results'],
         };
-
 
         const promptAgentContext = agentSlug
           ? agentContext

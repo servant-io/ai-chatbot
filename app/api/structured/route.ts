@@ -45,10 +45,7 @@ function buildZodSchema(definition: SchemaDefinition) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const {
-      prompt,
-      schemaDefinition,
-    } = requestSchema.parse(body);
+    const { prompt, schemaDefinition } = requestSchema.parse(body);
 
     const schema = buildZodSchema(schemaDefinition);
     const model = openai('gpt-4o-mini');
