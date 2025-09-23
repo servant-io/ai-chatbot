@@ -4,16 +4,23 @@ import { z } from 'zod/v4';
 
 import { withAuth } from '@workos-inc/authkit-nextjs';
 
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_FILE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'application/pdf',
+] as const;
+const ALLOWED_FILE_TYPES_SET = new Set<string>(ALLOWED_FILE_TYPES);
+
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
   file: z
     .instanceof(Blob)
-    .refine((file) => file.size <= 5 * 1024 * 1024, {
+    .refine((file) => file.size <= MAX_FILE_SIZE_BYTES, {
       message: 'File size should be less than 5MB',
     })
-    // Update the file type based on the kind of files you want to accept
-    .refine((file) => ['image/jpeg', 'image/png'].includes(file.type), {
-      message: 'File type should be JPEG or PNG',
+    .refine((file) => ALLOWED_FILE_TYPES_SET.has(file.type), {
+      message: 'File type should be JPEG, PNG, or PDF',
     }),
 });
 
@@ -53,6 +60,7 @@ export async function POST(request: Request) {
     try {
       const data = await put(`${filename}`, fileBuffer, {
         access: 'public',
+        contentType: file.type,
       });
 
       return NextResponse.json(data);

@@ -96,6 +96,26 @@ export class ChatPage {
     await this.page.getByTestId('attachments-button').click();
   }
 
+  async addPdfAttachment() {
+    this.page.on('filechooser', async (fileChooser) => {
+      const filePath = path.join(
+        process.cwd(),
+        'tests',
+        'fixtures',
+        'sample.pdf',
+      );
+      const pdfBuffer = fs.readFileSync(filePath);
+
+      await fileChooser.setFiles({
+        name: 'sample.pdf',
+        mimeType: 'application/pdf',
+        buffer: pdfBuffer,
+      });
+    });
+
+    await this.page.getByTestId('attachments-button').click();
+  }
+
   public async getSelectedModel() {
     const modelId = await this.page.getByTestId('model-selector').innerText();
     return modelId;

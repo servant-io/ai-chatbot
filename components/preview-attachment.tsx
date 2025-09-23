@@ -3,6 +3,7 @@ import { Loader } from './elements/loader';
 import { CrossSmallIcon } from './icons';
 import { Button } from './ui/button';
 import Image from 'next/image';
+import { FileText } from 'lucide-react';
 
 export const PreviewAttachment = ({
   attachment,
@@ -16,13 +17,15 @@ export const PreviewAttachment = ({
   onEdit?: () => void;
 }) => {
   const { name, url, contentType } = attachment;
+  const isImage = Boolean(contentType?.startsWith('image'));
+  const isPdf = contentType === 'application/pdf';
 
   return (
     <div
       data-testid="input-attachment-preview"
       className="group relative size-16 rounded-lg overflow-hidden bg-muted border"
     >
-      {contentType?.startsWith('image') ? (
+      {isImage ? (
         <Image
           src={url}
           alt={name ?? 'An image attachment'}
@@ -31,13 +34,19 @@ export const PreviewAttachment = ({
           height={64}
         />
       ) : (
-        <div className="size-full flex items-center justify-center text-xs text-muted-foreground">
-          File
+        <div className="size-full flex flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground bg-muted/80">
+          <FileText className="size-4" aria-hidden="true" />
+          <span className="font-medium uppercase tracking-wide">
+            {isPdf ? 'PDF' : 'FILE'}
+          </span>
         </div>
       )}
 
       {isUploading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-black/50"
+          data-testid="input-attachment-loader"
+        >
           <Loader size={16} />
         </div>
       )}

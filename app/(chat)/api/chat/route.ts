@@ -86,11 +86,35 @@ export async function POST(request: Request) {
   try {
     const json = await request.json();
     requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
+  } catch (error) {
+    if (isDevelopmentEnvironment) {
+      console.error('🚨 Request parsing error:', {
+        error,
+        message: (error as Error)?.message,
+        stack: (error as Error)?.stack,
+        name: (error as Error)?.name,
+        timestamp: new Date().toISOString(),
+        url: request.url,
+        method: request.method,
+      });
+    }
     return new ChatSDKError('bad_request:api').toResponse();
   }
 
   try {
+    if (isDevelopmentEnvironment) {
+      console.log('🧪 Processing chat request:', {
+        requestBody: {
+          id: requestBody.id,
+          messageId: requestBody.message?.id,
+          agentSlug: requestBody.agentSlug,
+          selectedVisibilityType: requestBody.selectedVisibilityType,
+          activeTools: requestBody.activeTools,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const {
       id,
       message,
@@ -118,6 +142,13 @@ export async function POST(request: Request) {
     const session = await withAuth();
 
     if (!session?.user) {
+      if (isDevelopmentEnvironment) {
+        console.error('🚨 Authentication failed:', {
+          hasSession: !!session,
+          hasUser: !!session?.user,
+          timestamp: new Date().toISOString(),
+        });
+      }
       return new ChatSDKError('unauthorized:chat').toResponse();
     }
 
@@ -130,6 +161,13 @@ export async function POST(request: Request) {
     });
 
     if (!databaseUser) {
+      if (isDevelopmentEnvironment) {
+        console.error('🚨 Database user not found:', {
+          workOSUserId: session.user.id,
+          email: session.user.email,
+          timestamp: new Date().toISOString(),
+        });
+      }
       return new ChatSDKError(
         'unauthorized:chat',
         'User not found',
@@ -435,6 +473,7 @@ export async function POST(request: Request) {
         if (isDevelopmentEnvironment) {
           console.log('🧪 Starting streamText execution...');
         }
+
         result.consumeStream();
         dataStream.merge(
           result.toUIMessageStream({
@@ -468,7 +507,20 @@ export async function POST(request: Request) {
         }
       },
       onError: (error) => {
-        console.error('Error in chat API:', error);
+        if (isDevelopmentEnvironment) {
+          console.error('🚨 Error in chat API:', {
+            error,
+            message: (error as Error)?.message,
+            stack: (error as Error)?.stack,
+            name: (error as Error)?.name,
+            cause: (error as any)?.cause,
+            timestamp: new Date().toISOString(),
+            chatId: id,
+            userId: databaseUser.id,
+          });
+        } else {
+          console.error('Error in chat API:', error);
+        }
         return 'Oops, an error occurred!';
       },
     });
@@ -489,7 +541,26 @@ export async function POST(request: Request) {
       return error.toResponse();
     }
 
-    console.error('Unhandled error in chat API:', error);
+    if (isDevelopmentEnvironment) {
+      console.error('🚨 Unhandled error in chat API:', {
+        error: error,
+        message: (error as Error)?.message,
+        stack: (error as Error)?.stack,
+        name: (error as Error)?.name,
+        cause: (error as any)?.cause,
+        timestamp: new Date().toISOString(),
+        requestBody: requestBody
+          ? {
+              id: requestBody.id,
+              messageId: requestBody.message?.id,
+              agentSlug: requestBody.agentSlug,
+              selectedVisibilityType: requestBody.selectedVisibilityType,
+            }
+          : 'unknown',
+      });
+    } else {
+      console.error('Unhandled error in chat API:', error);
+    }
     return new ChatSDKError('offline:chat').toResponse();
   }
 }
