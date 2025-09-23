@@ -247,7 +247,7 @@ if (session.permissions?.includes('access:weather:any')) {
 **Example**: From `route.ts`
 ```typescript
 ...((selectedChatModel === 'o4-mini' || selectedChatModel === 'gpt-4.1') && {
-  web_search_preview: openai.tools.webSearchPreview({
+  web_search: openai.tools.webSearchPreview({
     searchContextSize: 'high',
     userLocation: requestHints.city && requestHints.country ? {
       type: 'approximate',

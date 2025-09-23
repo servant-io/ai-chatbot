@@ -12,11 +12,11 @@ export type ToolGroup = {
 
 export const TOOL_GROUPS: Array<ToolGroup> = [
   {
-    id: 'web-search',
+    id: 'web_search',
     label: 'Web search',
     options: [
       {
-        id: 'web_search_preview',
+        id: 'web_search',
         label: 'Web search',
         description: 'Use OpenAI web search results when relevant.',
       },
@@ -106,5 +106,22 @@ const TOOL_ID_ORDER = TOOL_OPTIONS.map((option) => option.id);
 
 export const DEFAULT_ACTIVE_TOOL_IDS = [...TOOL_ID_ORDER];
 
-export const sortActiveTools = (tools: Array<string>) =>
-  TOOL_ID_ORDER.filter((toolId) => tools.includes(toolId));
+// Accept legacy persisted ids like `tool-web_search` by stripping the `tool-` prefix.
+const normalizeToolId = (candidate: unknown) => {
+  if (typeof candidate !== 'string') return null;
+  if (candidate.startsWith('tool-')) {
+    return candidate.slice('tool-'.length);
+  }
+
+  return candidate;
+};
+
+export const sortActiveTools = (tools: Array<string>) => {
+  const normalizedIds = new Set(
+    tools
+      .map((toolId) => normalizeToolId(toolId))
+      .filter((toolId): toolId is string => Boolean(toolId)),
+  );
+
+  return TOOL_ID_ORDER.filter((toolId) => normalizedIds.has(toolId));
+};

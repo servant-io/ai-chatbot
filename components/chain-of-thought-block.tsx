@@ -115,7 +115,7 @@ export function ChainOfThoughtBlock({ message, isLoading, isReadonly }: Props) {
         const state = (toolPart.state ?? 'input-available') as ToolState;
 
         // Special cases for specific tools
-        if (type === 'tool-web_search_preview') {
+        if (type === 'tool-web_search') {
           const isInput = state === 'input-available';
           title = isInput ? 'Searching for information' : 'Search completed';
         } else if (type === 'tool-file_search') {
@@ -216,7 +216,7 @@ export function ChainOfThoughtBlock({ message, isLoading, isReadonly }: Props) {
             const state = (toolPart.state ?? 'input-available') as ToolState;
 
             // Handle web search as a discrete step
-            if (type === 'tool-web_search_preview') {
+            if (type === 'tool-web_search') {
               const isInput = state === 'input-available';
               return (
                 <ChainOfThoughtStep

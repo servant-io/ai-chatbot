@@ -39,7 +39,10 @@ import { getFileContents } from '@/lib/ai/tools/get-file-contents';
 // Note: Mem0 tool definitions are intentionally not imported here to avoid
 // exposing them to the LLM tool registry. Definitions remain available under
 // `lib/ai/tools/*mem0*` and `lib/mem0/*` for future re‑enablement.
-import { isProductionEnvironment } from '@/lib/constants';
+import {
+  isProductionEnvironment,
+  isDevelopmentEnvironment,
+} from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
@@ -176,6 +179,7 @@ export async function POST(request: Request) {
     const messagesFromDb = await getMessagesByChatId({ id });
     const uiMessages = [...convertToUIMessages(messagesFromDb), message];
 
+
     const { longitude, latitude, city, country } = geolocation(request);
 
     const requestHints: RequestHints = {
@@ -288,7 +292,7 @@ export async function POST(request: Request) {
             dataStream,
           }),
           // Add web search for the unified openai chat model
-          web_search_preview: openai.tools.webSearchPreview({
+          web_search: openai.tools.webSearch({
             searchContextSize: 'high',
             userLocation:
               requestHints.city && requestHints.country
@@ -303,19 +307,25 @@ export async function POST(request: Request) {
 
         const nonConfigurableToolIds = new Set<string>();
 
+        // Always register file_search + get_file_contents schemas so
+        // validateUIMessages can handle prior tool parts in history.
+        tools.file_search = openai.tools.fileSearch(
+          resolvedVectorStoreId
+            ? { vectorStoreIds: [resolvedVectorStoreId] }
+            : {},
+        );
+        tools.get_file_contents = getFileContents({
+          session: aiToolsSession,
+          userId: databaseUser.id,
+          // Empty string ensures execute() gracefully reports missing store
+          vectorStoreId: resolvedVectorStoreId ?? '',
+        });
+
         if (resolvedVectorStoreId) {
           console.log(
             `🗂️ Enabling file_search tool for vector store ${resolvedVectorStoreId}`,
           );
-          tools.file_search = openai.tools.fileSearch({
-            vectorStoreIds: [resolvedVectorStoreId],
-          });
           nonConfigurableToolIds.add('file_search');
-          tools.get_file_contents = getFileContents({
-            session: aiToolsSession,
-            userId: databaseUser.id,
-            vectorStoreId: resolvedVectorStoreId,
-          });
           nonConfigurableToolIds.add('get_file_contents');
         }
 
@@ -349,26 +359,25 @@ export async function POST(request: Request) {
 
         const validated = await validateUIMessages({
           messages: uiMessages,
-          tools, // <= critical for typed tool parts like tool-web_search_preview
+          tools, // <= critical for typed tool parts like tool-web_search
         });
 
         // 2) Convert to model messages with the same tool registry
         const modelMessages = convertToModelMessages(validated, { tools });
 
+        if (isDevelopmentEnvironment) {
+          console.log(
+            '🧪 Model messages:',
+            JSON.stringify(modelMessages, null, 2),
+          );
+        }
+
         const openAIOptions: OpenAIResponsesProviderOptions = {
           reasoningEffort: reasoningEffort,
           reasoningSummary: 'auto',
+          include: ['reasoning.encrypted_content', 'file_search_call.results'],
         };
 
-        const includeSettings: Array<
-          NonNullable<OpenAIResponsesProviderOptions['include']>[number]
-        > = ['reasoning.encrypted_content'];
-
-        if ('file_search' in tools) {
-          includeSettings.push('file_search_call.results');
-        }
-
-        openAIOptions.include = Array.from(new Set(includeSettings));
 
         const promptAgentContext = agentSlug
           ? agentContext
@@ -425,6 +434,9 @@ export async function POST(request: Request) {
           },
         });
 
+        if (isDevelopmentEnvironment) {
+          console.log('🧪 Starting streamText execution...');
+        }
         result.consumeStream();
         dataStream.merge(
           result.toUIMessageStream({
