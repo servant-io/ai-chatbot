@@ -66,9 +66,14 @@ export async function GET(
       }
 
       // Verify ownership via metadata or database linkage
-      const ownerUserId =
+      const rawOwnerUserId =
         typeof vectorStore.metadata === 'object'
           ? (vectorStore.metadata as Record<string, unknown>).ownerUserId
+          : undefined;
+
+      const ownerUserId =
+        typeof rawOwnerUserId === 'string' && rawOwnerUserId.length > 0
+          ? rawOwnerUserId
           : undefined;
 
       const [agentRecord] = await db
@@ -77,15 +82,15 @@ export async function GET(
         .where(eq(agentTable.vectorStoreId, vectorStoreId))
         .limit(1);
 
-      if (
-        ownerUserId &&
-        ownerUserId !== dbUser.id &&
-        (!agentRecord || agentRecord.userId !== dbUser.id)
-      ) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+      const agentOwnerId = agentRecord?.userId ?? undefined;
+      const agentIsPublic = Boolean(agentRecord?.isPublic);
 
-      if (agentRecord && agentRecord.userId !== dbUser.id) {
+      const isMetadataOwner = ownerUserId === dbUser.id;
+      const isAgentOwner = agentOwnerId === dbUser.id;
+      const requesterHasAccess =
+        agentIsPublic || isMetadataOwner || isAgentOwner;
+
+      if (!requesterHasAccess) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
