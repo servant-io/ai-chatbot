@@ -201,13 +201,21 @@ const PurePreviewMessage = ({
                           key={key}
                           data-testid="message-content"
                           className={cn('justify-start items-start text-left', {
-                            'bg-primary text-primary-foreground':
+                            'bg-secondary text-foreground dark:bg-primary dark:text-primary-foreground':
                               message.role === 'user',
                             'bg-transparent -ml-4':
                               message.role === 'assistant',
                           })}
                         >
-                          <Response>{sanitizeText(part.text)}</Response>
+                          {message.role === 'user' ? (
+                            <div className="whitespace-pre-wrap break-words">
+                              {sanitizeText(part.text)}
+                            </div>
+                          ) : (
+                            <Response className="[&_[data-streamdown='ordered-list']]:pl-6 [&_[data-streamdown='unordered-list']]:pl-6">
+                              {sanitizeText(part.text)}
+                            </Response>
+                          )}
                         </MessageContent>
                       );
                     }
@@ -231,29 +239,6 @@ const PurePreviewMessage = ({
                         </div>
                       );
                     }
-                  }
-
-                  if (type === 'tool-getWeather') {
-                    const { toolCallId, state } = part;
-
-                    return (
-                      <Tool key={toolCallId} defaultOpen={true}>
-                        <ToolHeader type="tool-getWeather" state={state} />
-                        <ToolContent>
-                          {state === 'input-available' && (
-                            <ToolInput input={part.input} />
-                          )}
-                          {state === 'output-available' && (
-                            <ToolOutput
-                              output={
-                                <Weather weatherAtLocation={part.output} />
-                              }
-                              errorText={undefined}
-                            />
-                          )}
-                        </ToolContent>
-                      </Tool>
-                    );
                   }
 
                   if (type === 'tool-requestSuggestions') {
