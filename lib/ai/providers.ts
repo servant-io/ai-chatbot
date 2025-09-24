@@ -22,7 +22,6 @@ export const myProvider = isTestEnvironment
     })()
   : customProvider({
       languageModels: {
-
         'chat-model': openai.languageModel('gpt-5'),
         'chat-model-grok-4-fast-reasoning': xai.languageModel(
           'grok-4-fast-reasoning',

@@ -478,9 +478,7 @@ export async function POST(request: Request) {
               : undefined;
 
         const resolvedProviderOptions =
-          Object.keys(providerOptions).length > 0
-            ? providerOptions
-            : undefined;
+          Object.keys(providerOptions).length > 0 ? providerOptions : undefined;
 
         const result = streamText({
           model: myProvider.languageModel(selectedChatModelId),

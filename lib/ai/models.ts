@@ -27,8 +27,7 @@ export const chatModels = [
   {
     id: 'chat-model-grok-4-fast-reasoning',
     name: 'Grok 4 (Fast)',
-    description:
-      'Fast multimodal reasoning from X AI',
+    description: 'Fast multimodal reasoning from X AI',
     provider: 'xai',
     providerModelId: 'xai/grok-4-fast-reasoning',
     capabilities: {

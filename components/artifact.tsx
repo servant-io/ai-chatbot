@@ -344,16 +344,16 @@ function PureArtifact({
                     className="bg-background dark:bg-muted"
                     setMessages={setMessages}
                     selectedVisibilityType={selectedVisibilityType}
-                  reasoningEffort={reasoningEffort}
-                  setReasoningEffort={() => {}} // No-op since artifact doesn't control reasoning
-                  activeTools={activeTools}
-                  setActiveTools={setActiveTools}
-                  selectedModelId={selectedModelId}
-                />
+                    reasoningEffort={reasoningEffort}
+                    setReasoningEffort={() => {}} // No-op since artifact doesn't control reasoning
+                    activeTools={activeTools}
+                    setActiveTools={setActiveTools}
+                    selectedModelId={selectedModelId}
+                  />
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
 
           <motion.div
             className="fixed dark:bg-muted bg-background h-dvh flex flex-col overflow-y-scroll md:border-l dark:border-zinc-700 border-zinc-200"
