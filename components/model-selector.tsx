@@ -25,9 +25,11 @@ export function ModelSelector({
   user,
   selectedModelId,
   className,
+  onModelChange,
 }: {
   user: any;
   selectedModelId: string;
+  onModelChange?: (modelId: string) => void;
 } & React.ComponentProps<typeof Button>) {
   const [open, setOpen] = useState(false);
 
@@ -56,8 +58,9 @@ export function ModelSelector({
   useEffect(() => {
     if (selectedModelId !== validModelId) {
       saveChatModelAsCookie(validModelId);
+      onModelChange?.(validModelId);
     }
-  }, [selectedModelId, validModelId]);
+  }, [selectedModelId, validModelId, onModelChange]);
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -91,6 +94,7 @@ export function ModelSelector({
                 startTransition(() => {
                   setOptimisticModelId(id);
                   saveChatModelAsCookie(id);
+                  onModelChange?.(id);
                 });
               }}
               data-active={id === optimisticModelId}

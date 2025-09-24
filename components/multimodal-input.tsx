@@ -80,6 +80,7 @@ function PureMultimodalInput({
   disableHistoryUpdate,
   activeTools,
   setActiveTools,
+  selectedModelId,
 }: {
   chatId: string;
   input: string;
@@ -104,6 +105,7 @@ function PureMultimodalInput({
   disableHistoryUpdate?: boolean;
   activeTools: Array<string>;
   setActiveTools: Dispatch<SetStateAction<Array<string>>>;
+  selectedModelId: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -231,13 +233,21 @@ function PureMultimodalInput({
   };
 
   const providerModelId = useMemo(() => {
-    return resolveProviderModelId('chat-model');
-  }, []);
+    return resolveProviderModelId(selectedModelId);
+  }, [selectedModelId]);
 
   const contextMax = useMemo(() => {
     // Resolve from selected model; stable across chunks.
-    const cw = getContextWindow(providerModelId);
-    return cw.combinedMax ?? cw.inputMax ?? 0;
+    try {
+      const cw = getContextWindow(providerModelId);
+      return cw.combinedMax ?? cw.inputMax ?? 0;
+    } catch (error) {
+      console.warn('Unable to resolve context window for model', {
+        providerModelId,
+        error,
+      });
+      return 0;
+    }
   }, [providerModelId]);
 
   const usedTokens = useMemo(() => {
@@ -408,7 +418,7 @@ function PureMultimodalInput({
             <AttachmentsButton
               fileInputRef={fileInputRef}
               status={status}
-              selectedModelId={'chat-model'}
+              selectedModelId={selectedModelId}
             />
             <ReasoningSelectorCompact
               reasoningEffort={reasoningEffort}
@@ -450,6 +460,7 @@ export const MultimodalInput = memo(
     if (prevProps.disableHistoryUpdate !== nextProps.disableHistoryUpdate)
       return false;
     if (!equal(prevProps.activeTools, nextProps.activeTools)) return false;
+    if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
 
     return true;
   },

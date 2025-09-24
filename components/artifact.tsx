@@ -70,6 +70,7 @@ function PureArtifact({
   reasoningEffort,
   activeTools,
   setActiveTools,
+  selectedModelId,
 }: {
   chatId: string;
   input: string;
@@ -88,6 +89,7 @@ function PureArtifact({
   reasoningEffort: 'low' | 'medium' | 'high';
   activeTools: Array<string>;
   setActiveTools: Dispatch<SetStateAction<Array<string>>>;
+  selectedModelId: string;
 }) {
   const { artifact, setArtifact, metadata, setMetadata } = useArtifact();
 
@@ -342,15 +344,16 @@ function PureArtifact({
                     className="bg-background dark:bg-muted"
                     setMessages={setMessages}
                     selectedVisibilityType={selectedVisibilityType}
-                    reasoningEffort={reasoningEffort}
-                    setReasoningEffort={() => {}} // No-op since artifact doesn't control reasoning
-                    activeTools={activeTools}
-                    setActiveTools={setActiveTools}
-                  />
-                </div>
+                  reasoningEffort={reasoningEffort}
+                  setReasoningEffort={() => {}} // No-op since artifact doesn't control reasoning
+                  activeTools={activeTools}
+                  setActiveTools={setActiveTools}
+                  selectedModelId={selectedModelId}
+                />
               </div>
-            </motion.div>
-          )}
+            </div>
+          </motion.div>
+        )}
 
           <motion.div
             className="fixed dark:bg-muted bg-background h-dvh flex flex-col overflow-y-scroll md:border-l dark:border-zinc-700 border-zinc-200"
@@ -517,6 +520,7 @@ export const Artifact = memo(PureArtifact, (prevProps, nextProps) => {
   if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
     return false;
   if (!equal(prevProps.activeTools, nextProps.activeTools)) return false;
+  if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
 
   return true;
 });

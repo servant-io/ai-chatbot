@@ -35,6 +35,7 @@ import {
   DEFAULT_ACTIVE_TOOL_IDS,
   sortActiveTools,
 } from '@/lib/ai/tools/active-tools';
+import { getChatModelById, DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 
 export function Chat({
   id,
@@ -80,6 +81,9 @@ export function Chat({
   const [reasoningEffort, setReasoningEffort] = useState<
     'low' | 'medium' | 'high'
   >('medium');
+  const [selectedChatModel, setSelectedChatModel] = useState(
+    () => getChatModelById(initialChatModel)?.id ?? DEFAULT_CHAT_MODEL,
+  );
   const [agentContext, setAgentContext] = useState<{
     agentName: string;
     agentDescription?: string;
@@ -155,6 +159,7 @@ export function Chat({
             message: messages.at(-1),
             reasoningEffort: reasoningEffort,
             selectedVisibilityType: visibilityType,
+            selectedChatModel,
             ...(agentSlug && { agentSlug }),
             ...body,
           },
@@ -187,6 +192,12 @@ export function Chat({
   useEffect(() => {
     setArtifact({ ...initialArtifactData });
   }, [id, setArtifact]);
+
+  useEffect(() => {
+    setSelectedChatModel(
+      getChatModelById(initialChatModel)?.id ?? DEFAULT_CHAT_MODEL,
+    );
+  }, [initialChatModel]);
 
   const sendMessageWithActiveTools = useCallback(
     (
@@ -261,6 +272,8 @@ export function Chat({
           selectedVisibilityType={initialVisibilityType}
           isReadonly={isReadonly}
           session={user}
+          selectedChatModelId={selectedChatModel}
+          onSelectChatModel={setSelectedChatModel}
         />
 
         {agentContext && <AgentChatHeader agentContext={agentContext} />}
@@ -297,6 +310,7 @@ export function Chat({
               usage={usage}
               activeTools={activeTools}
               setActiveTools={setActiveTools}
+              selectedModelId={selectedChatModel}
             />
           )}
         </div>
@@ -320,6 +334,7 @@ export function Chat({
         reasoningEffort={reasoningEffort}
         activeTools={activeTools}
         setActiveTools={setActiveTools}
+        selectedModelId={selectedChatModel}
       />
     </>
   );

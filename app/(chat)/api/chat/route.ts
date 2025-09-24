@@ -11,6 +11,11 @@ import {
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
 import {
+  DEFAULT_CHAT_MODEL,
+  getChatModelById,
+  resolveProviderModelId,
+} from '@/lib/ai/models';
+import {
   createStreamId,
   deleteChatById,
   getChatById,
@@ -55,6 +60,7 @@ import { ChatSDKError } from '@/lib/errors';
 import type { ChatMessage } from '@/lib/types';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { openai, type OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider';
 
 export const maxDuration = 800; // This function can run for a maximum of 5 seconds
 
@@ -120,6 +126,7 @@ export async function POST(request: Request) {
       message,
       reasoningEffort,
       selectedVisibilityType,
+      selectedChatModel: requestedChatModel,
       agentSlug,
       agentContext: previewAgentContext,
       activeTools: requestedActiveTools,
@@ -129,6 +136,7 @@ export async function POST(request: Request) {
       message: ChatMessage;
       reasoningEffort: 'low' | 'medium' | 'high';
       selectedVisibilityType: VisibilityType;
+      selectedChatModel?: string;
       agentSlug?: string;
       agentContext?: {
         agentName: string;
@@ -284,6 +292,13 @@ export async function POST(request: Request) {
       sizeBytes: file.fileSizeBytes ?? null,
     }));
 
+    const selectedChatModelId =
+      getChatModelById(requestedChatModel ?? '')?.id ?? DEFAULT_CHAT_MODEL;
+    const providerModelId = resolveProviderModelId(selectedChatModelId);
+    const [providerNamespace] = providerModelId.split('/');
+    const isOpenAIModel = providerNamespace === 'openai';
+    const isXaiModel = providerNamespace === 'xai';
+
     const stream = createUIMessageStream({
       execute: async ({ writer: dataStream }) => {
         // Build your tool set (the same set you pass to streamText)
@@ -328,29 +343,21 @@ export async function POST(request: Request) {
             session: aiToolsSession,
             dataStream,
           }),
-          // Add web search for the unified openai chat model
-          web_search: openai.tools.webSearch({
-            searchContextSize: 'high',
-            userLocation:
-              requestHints.city && requestHints.country
-                ? {
-                    type: 'approximate',
-                    city: requestHints.city,
-                    region: requestHints.country,
-                  }
-                : undefined,
-          }),
         };
 
         const nonConfigurableToolIds = new Set<string>();
+        let fileSearchRegistered = false;
 
         // Always register file_search + get_file_contents schemas so
         // validateUIMessages can handle prior tool parts in history.
-        tools.file_search = openai.tools.fileSearch(
-          resolvedVectorStoreId
-            ? { vectorStoreIds: [resolvedVectorStoreId] }
-            : { vectorStoreIds: [] },
-        );
+        if (isOpenAIModel) {
+          tools.file_search = openai.tools.fileSearch(
+            resolvedVectorStoreId
+              ? { vectorStoreIds: [resolvedVectorStoreId] }
+              : { vectorStoreIds: [] },
+          );
+          fileSearchRegistered = true;
+        }
         tools.get_file_contents = getFileContents({
           session: aiToolsSession,
           userId: databaseUser.id,
@@ -359,10 +366,16 @@ export async function POST(request: Request) {
         });
 
         if (resolvedVectorStoreId) {
-          console.log(
-            `🗂️ Enabling file_search tool for vector store ${resolvedVectorStoreId}`,
-          );
-          nonConfigurableToolIds.add('file_search');
+          if (fileSearchRegistered) {
+            console.log(
+              `🗂️ Enabling file_search tool for vector store ${resolvedVectorStoreId}`,
+            );
+            nonConfigurableToolIds.add('file_search');
+          } else if (isXaiModel) {
+            console.log(
+              `🤖 Skipping OpenAI file_search tool for ${providerModelId}; using get_file_contents fallback only.`,
+            );
+          }
           nonConfigurableToolIds.add('get_file_contents');
         }
 
@@ -396,7 +409,7 @@ export async function POST(request: Request) {
 
         const validated = await validateUIMessages({
           messages: uiMessages,
-          tools, // <= critical for typed tool parts like tool-web_search
+          tools, // <= critical for typed tool parts when replaying history
         });
 
         // 2) Convert to model messages with the same tool registry
@@ -409,11 +422,30 @@ export async function POST(request: Request) {
           );
         }
 
-        const openAIOptions: OpenAIResponsesProviderOptions = {
-          reasoningEffort: reasoningEffort,
-          reasoningSummary: 'auto',
-          include: ['reasoning.encrypted_content', 'file_search_call.results'],
-        };
+        const providerOptions: SharedV2ProviderOptions = {};
+
+        if (isOpenAIModel) {
+          const openAIOptions: OpenAIResponsesProviderOptions = {
+            reasoningEffort: reasoningEffort,
+            reasoningSummary: 'auto',
+            include: [
+              'reasoning.encrypted_content',
+              'file_search_call.results',
+            ],
+          };
+          providerOptions.openai =
+            openAIOptions as SharedV2ProviderOptions[string];
+        }
+
+        if (isXaiModel) {
+          providerOptions.xai = {
+            searchParameters: {
+              mode: 'auto',
+              returnCitations: true,
+              maxSearchResults: 12,
+            },
+          } satisfies SharedV2ProviderOptions[string];
+        }
 
         const promptAgentContext = agentSlug
           ? agentContext
@@ -445,10 +477,15 @@ export async function POST(request: Request) {
                 }
               : undefined;
 
+        const resolvedProviderOptions =
+          Object.keys(providerOptions).length > 0
+            ? providerOptions
+            : undefined;
+
         const result = streamText({
-          model: myProvider.languageModel('chat-model'),
+          model: myProvider.languageModel(selectedChatModelId),
           system: systemPrompt({
-            selectedChatModel: 'chat-model',
+            selectedChatModel: selectedChatModelId,
             requestHints,
             agentContext: promptAgentContext,
           }),
@@ -461,9 +498,7 @@ export async function POST(request: Request) {
             isEnabled: isProductionEnvironment,
             functionId: 'stream-text',
           },
-          providerOptions: {
-            openai: openAIOptions,
-          },
+          providerOptions: resolvedProviderOptions,
           onFinish: ({ usage }) => {
             finalUsage = usage;
             dataStream.write({ type: 'data-usage', data: usage });

@@ -12,17 +12,6 @@ export type ToolGroup = {
 
 export const TOOL_GROUPS: Array<ToolGroup> = [
   {
-    id: 'web_search',
-    label: 'Web search',
-    options: [
-      {
-        id: 'web_search',
-        label: 'Web search',
-        description: 'Use OpenAI web search results when relevant.',
-      },
-    ],
-  },
-  {
     id: 'transcripts',
     label: 'Transcripts',
     options: [
