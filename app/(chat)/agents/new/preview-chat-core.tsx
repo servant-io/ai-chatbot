@@ -11,6 +11,11 @@ import {
   DEFAULT_ACTIVE_TOOL_IDS,
   sortActiveTools,
 } from '@/lib/ai/tools/active-tools';
+import {
+  DEFAULT_CHAT_MODEL,
+  getChatModelById,
+} from '@/lib/ai/models';
+import { ModelSelector } from '@/components/model-selector';
 
 interface PreviewChatCoreProps {
   formData: {
@@ -33,6 +38,9 @@ export function PreviewChatCore({ formData, user }: PreviewChatCoreProps) {
   const [activeTools, setActiveTools] = useState<Array<string>>(() => [
     ...DEFAULT_ACTIVE_TOOL_IDS,
   ]);
+  const [selectedChatModelId, setSelectedChatModelId] = useState(
+    () => getChatModelById(DEFAULT_CHAT_MODEL)?.id ?? DEFAULT_CHAT_MODEL,
+  );
 
   const updateActiveTools = useCallback(
     (next: Array<string> | ((current: Array<string>) => Array<string>)) => {
@@ -51,12 +59,21 @@ export function PreviewChatCore({ formData, user }: PreviewChatCoreProps) {
   // Keep latest values in refs to avoid stale closure in transport
   const formDataRef = useRef(formData);
   const reasoningRef = useRef(reasoningEffort);
+  const selectedModelRef = useRef(selectedChatModelId);
   useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
   useEffect(() => {
     reasoningRef.current = reasoningEffort;
   }, [reasoningEffort]);
+  useEffect(() => {
+    const resolvedModelId =
+      getChatModelById(selectedChatModelId)?.id ?? DEFAULT_CHAT_MODEL;
+    selectedModelRef.current = resolvedModelId;
+    if (resolvedModelId !== selectedChatModelId) {
+      setSelectedChatModelId(resolvedModelId);
+    }
+  }, [selectedChatModelId]);
 
   const { messages, setMessages, sendMessage, status, stop, regenerate } =
     useChat<ChatMessage>({
@@ -103,6 +120,7 @@ export function PreviewChatCore({ formData, user }: PreviewChatCoreProps) {
               message: messages.at(-1),
               reasoningEffort: currentReasoning,
               selectedVisibilityType: 'private',
+              selectedChatModel: selectedModelRef.current,
               ...(agentCtx ? { agentContext: agentCtx } : {}),
               ...(fd.vectorStoreId
                 ? { agentVectorStoreId: fd.vectorStoreId }
@@ -119,7 +137,11 @@ export function PreviewChatCore({ formData, user }: PreviewChatCoreProps) {
       message?: Parameters<typeof sendMessage>[0],
       options?: Parameters<typeof sendMessage>[1],
     ) => {
-      const mergedBody = { ...(options?.body ?? {}), activeTools };
+      const mergedBody = {
+        ...(options?.body ?? {}),
+        activeTools,
+        selectedChatModel: selectedModelRef.current,
+      };
       return sendMessage(message, { ...options, body: mergedBody });
     },
     [sendMessage, activeTools],
@@ -141,7 +163,13 @@ export function PreviewChatCore({ formData, user }: PreviewChatCoreProps) {
         />
       </div>
 
-      <div className="mb-2">
+      <div className="mb-2 flex flex-col gap-2">
+        <ModelSelector
+          user={user}
+          selectedModelId={selectedChatModelId}
+          onModelChange={setSelectedChatModelId}
+          className="justify-between"
+        />
         <MultimodalInput
           chatId={previewChatId}
           input={input}
@@ -161,6 +189,7 @@ export function PreviewChatCore({ formData, user }: PreviewChatCoreProps) {
           disableHistoryUpdate={true}
           activeTools={activeTools}
           setActiveTools={updateActiveTools}
+          selectedModelId={selectedChatModelId}
         />
       </div>
     </div>
