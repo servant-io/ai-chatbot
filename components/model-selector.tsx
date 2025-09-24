@@ -20,16 +20,19 @@ import { chatModels, DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import { cn } from '@/lib/utils';
 
 import { CheckCircleFillIcon, ChevronDownIcon } from './icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
 export function ModelSelector({
   user,
   selectedModelId,
   className,
   onModelChange,
+  disabled,
 }: {
   user: any;
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
+  disabled?: boolean;
 } & React.ComponentProps<typeof Button>) {
   const [open, setOpen] = useState(false);
 
@@ -61,6 +64,35 @@ export function ModelSelector({
       onModelChange?.(validModelId);
     }
   }, [selectedModelId, validModelId, onModelChange]);
+
+  useEffect(() => {
+    if (disabled && open) {
+      setOpen(false);
+    }
+  }, [disabled, open]);
+
+  if (disabled) {
+    return (
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>
+          <span className={cn('inline-flex w-fit', className)}>
+            <Button
+              data-testid="model-selector"
+              variant="outline"
+              className="md:px-2 md:h-[34px]"
+              disabled
+            >
+              {selectedChatModel?.name}
+              <ChevronDownIcon />
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent align="center">
+          Model selection locks after the first message.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

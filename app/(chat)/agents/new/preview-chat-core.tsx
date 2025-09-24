@@ -144,6 +144,8 @@ export function PreviewChatCore({ formData, user }: PreviewChatCoreProps) {
     [sendMessage, activeTools],
   );
 
+  const isModelSelectorDisabled = messages.length > 0;
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
@@ -166,6 +168,7 @@ export function PreviewChatCore({ formData, user }: PreviewChatCoreProps) {
           selectedModelId={selectedChatModelId}
           onModelChange={setSelectedChatModelId}
           className="justify-between"
+          disabled={isModelSelectorDisabled}
         />
         <MultimodalInput
           chatId={previewChatId}

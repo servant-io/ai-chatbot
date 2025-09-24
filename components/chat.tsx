@@ -6,7 +6,7 @@ import {
   type LanguageModelUsage,
 } from 'ai';
 import { useChat } from '@ai-sdk/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
 import { AgentChatHeader } from '@/components/agent-chat-header';
@@ -84,6 +84,7 @@ export function Chat({
   const [selectedChatModel, setSelectedChatModel] = useState(
     () => getChatModelById(initialChatModel)?.id ?? DEFAULT_CHAT_MODEL,
   );
+  const selectedChatModelRef = useRef(selectedChatModel);
   const [agentContext, setAgentContext] = useState<{
     agentName: string;
     agentDescription?: string;
@@ -159,7 +160,7 @@ export function Chat({
             message: messages.at(-1),
             reasoningEffort: reasoningEffort,
             selectedVisibilityType: visibilityType,
-            selectedChatModel,
+            selectedChatModel: selectedChatModelRef.current,
             ...(agentSlug && { agentSlug }),
             ...body,
           },
@@ -199,16 +200,26 @@ export function Chat({
     );
   }, [initialChatModel]);
 
+  useEffect(() => {
+    selectedChatModelRef.current = selectedChatModel;
+  }, [selectedChatModel]);
+
   const sendMessageWithActiveTools = useCallback(
     (
       message?: Parameters<typeof sendMessage>[0],
       options?: Parameters<typeof sendMessage>[1],
     ) => {
-      const mergedBody = { ...(options?.body ?? {}), activeTools };
+      const mergedBody = {
+        ...(options?.body ?? {}),
+        activeTools,
+        selectedChatModel: selectedChatModelRef.current,
+      };
       return sendMessage(message, { ...options, body: mergedBody });
     },
     [sendMessage, activeTools],
   );
+
+  const isModelSelectorDisabled = messages.length > 0;
 
   const searchParams = useSearchParams();
   const query = searchParams.get('query');
@@ -274,6 +285,7 @@ export function Chat({
           session={user}
           selectedChatModelId={selectedChatModel}
           onSelectChatModel={setSelectedChatModel}
+          disableModelSelector={isModelSelectorDisabled}
         />
 
         {agentContext && <AgentChatHeader agentContext={agentContext} />}
