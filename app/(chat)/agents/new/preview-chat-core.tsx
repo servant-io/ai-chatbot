@@ -11,10 +11,7 @@ import {
   DEFAULT_ACTIVE_TOOL_IDS,
   sortActiveTools,
 } from '@/lib/ai/tools/active-tools';
-import {
-  DEFAULT_CHAT_MODEL,
-  getChatModelById,
-} from '@/lib/ai/models';
+import { DEFAULT_CHAT_MODEL, getChatModelById } from '@/lib/ai/models';
 import { ModelSelector } from '@/components/model-selector';
 
 interface PreviewChatCoreProps {
