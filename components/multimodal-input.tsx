@@ -37,7 +37,7 @@ import { ArrowDown, BrainIcon } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
-import { resolveProviderModelId } from '@/lib/ai/models';
+import { getChatModelById, resolveProviderModelId } from '@/lib/ai/models';
 import { getContextWindow, normalizeUsage } from 'tokenlens';
 import { Context } from './elements/context';
 import { cn } from '@/lib/utils';
@@ -50,6 +50,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import {
   DEFAULT_ACTIVE_TOOL_IDS,
   TOOL_OPTIONS,
@@ -158,6 +159,14 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
+
+  const selectedChatModel = useMemo(
+    () => getChatModelById(selectedModelId),
+    [selectedModelId],
+  );
+
+  const pdfUploadsDisabled =
+    selectedChatModel?.id === 'chat-model-grok-4-fast-reasoning';
 
   const submitForm = useCallback(() => {
     if (!disableHistoryUpdate) {
@@ -273,11 +282,39 @@ function PureMultimodalInput({
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
+      if (files.length === 0) {
+        return;
+      }
 
-      setUploadQueue(files.map((file) => file.name));
+      let filteredFiles = files;
+
+      if (pdfUploadsDisabled) {
+        filteredFiles = files.filter((file) => {
+          const isPdf =
+            file.type === 'application/pdf' ||
+            file.name.toLowerCase().endsWith('.pdf');
+          return !isPdf;
+        });
+
+        if (filteredFiles.length !== files.length) {
+          toast.info(
+            'PDF uploads are disabled for Grok 4 (Fast). ' +
+              'Please switch models or upload an image.',
+          );
+        }
+      }
+
+      if (filteredFiles.length === 0) {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
+
+      setUploadQueue(filteredFiles.map((file) => file.name));
 
       try {
-        const uploadPromises = files.map((file) => uploadFile(file));
+        const uploadPromises = filteredFiles.map((file) => uploadFile(file));
         const uploadedAttachments = await Promise.all(uploadPromises);
         const successfullyUploadedAttachments = uploadedAttachments.filter(
           (attachment) => attachment !== undefined,
@@ -291,9 +328,12 @@ function PureMultimodalInput({
         console.error('Error uploading files!', error);
       } finally {
         setUploadQueue([]);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     },
-    [setAttachments],
+    [setAttachments, pdfUploadsDisabled, fileInputRef],
   );
 
   const { isAtBottom, scrollToBottom } = useScrollToBottom();
@@ -348,7 +388,7 @@ function PureMultimodalInput({
         className="fixed -top-4 -left-4 size-0.5 opacity-0 pointer-events-none"
         ref={fileInputRef}
         multiple
-        accept="image/*,application/pdf"
+        accept={pdfUploadsDisabled ? 'image/*' : 'image/*,application/pdf'}
         onChange={handleFileChange}
         tabIndex={-1}
       />
@@ -397,6 +437,12 @@ function PureMultimodalInput({
             ))}
           </div>
         )}
+        {pdfUploadsDisabled && (
+          <div className="px-3 text-xs text-muted-foreground">
+            Grok 4 (Fast) does not support PDF uploads. Switch models to send
+            PDFs or upload an image instead.
+          </div>
+        )}
         <div className="flex w-full min-w-0 flex-row gap-2 items-start">
           <PromptInputTextarea
             data-testid="multimodal-input"
@@ -419,6 +465,7 @@ function PureMultimodalInput({
               fileInputRef={fileInputRef}
               status={status}
               selectedModelId={selectedModelId}
+              pdfUploadsDisabled={pdfUploadsDisabled}
             />
             <ReasoningSelectorCompact
               reasoningEffort={reasoningEffort}
@@ -470,14 +517,16 @@ function PureAttachmentsButton({
   fileInputRef,
   status,
   selectedModelId,
+  pdfUploadsDisabled,
 }: {
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
   status: UseChatHelpers<ChatMessage>['status'];
   selectedModelId: string;
+  pdfUploadsDisabled: boolean;
 }) {
   const isReasoningModel = selectedModelId === 'chat-model-reasoning';
 
-  return (
+  const button = (
     <Button
       data-testid="attachments-button"
       className="rounded-md p-1.5 h-fit hover:bg-muted transition-colors duration-200"
@@ -491,6 +540,19 @@ function PureAttachmentsButton({
     >
       <PaperclipIcon size={14} />
     </Button>
+  );
+
+  if (!pdfUploadsDisabled) {
+    return button;
+  }
+
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent align="center">
+        PDFs are disabled for Grok 4 (Fast). Upload an image or switch models.
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
