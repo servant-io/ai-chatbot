@@ -544,7 +544,7 @@ function PureAttachmentsButton({
     <Tooltip delayDuration={150}>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent align="center">
-        PDFs are disabled for Grok 4 (Fast). Upload an image or switch models.
+        PDFs are <b>not supported</b> for Grok 4.
       </TooltipContent>
     </Tooltip>
   );
