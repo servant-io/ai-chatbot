@@ -10,6 +10,15 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://servant.ai'),
   title: 'Servant AI',
   description: 'Servant AI',
+  icons: {
+    icon: '/favicon.ico',
+  },
+  openGraph: {
+    images: ['/opengraph-image.png'],
+  },
+  twitter: {
+    images: ['/twitter-image.png'],
+  },
 };
 
 export const viewport = {

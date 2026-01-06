@@ -7,8 +7,6 @@ import Script from 'next/script';
 import { DataStreamProvider } from '@/components/data-stream-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
-export const experimental_ppr = true;
-
 export default async function Layout({
   children,
 }: {
