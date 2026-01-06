@@ -37,8 +37,5 @@ export async function POST(request: Request) {
   ]);
   const result = await run.returnValue;
 
-  return NextResponse.json({
-    runId: run.runId,
-    ...result,
-  });
+  return NextResponse.json(result);
 }
