@@ -23,6 +23,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           'audio/x-m4a',
           'audio/aac',
           'audio/mp4a-latm',
+          'audio/quicktime',
           'audio/wav',
           'audio/webm',
           'video/mp4',

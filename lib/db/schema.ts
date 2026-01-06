@@ -258,3 +258,36 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+export type AudioTranscriptionUtterance = {
+  start: number;
+  end: number;
+  transcript: string;
+  speaker: number;
+};
+
+export const audioTranscription = pgTable(
+  'AudioTranscription',
+  {
+    id: uuid('id').primaryKey().notNull().defaultRandom(),
+    userId: uuid('userId')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    runId: text('runId').notNull(),
+    fileName: text('fileName'),
+    transcript: text('transcript').notNull(),
+    utterances: jsonb('utterances')
+      .$type<AudioTranscriptionUtterance[]>()
+      .notNull(),
+    speakerNames: jsonb('speakerNames')
+      .$type<Record<string, string>>()
+      .notNull(),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+  },
+  (table) => ({
+    userIdIdx: index('AudioTranscription_userId_idx').on(table.userId),
+    createdAtIdx: index('AudioTranscription_createdAt_idx').on(table.createdAt),
+  }),
+);
+
+export type AudioTranscription = InferSelectModel<typeof audioTranscription>;

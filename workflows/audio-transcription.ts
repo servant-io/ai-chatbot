@@ -1,11 +1,9 @@
 import { del } from '@vercel/blob';
+import { getWorkflowMetadata } from 'workflow';
+import { createAudioTranscription } from '@/lib/db/queries';
+import type { AudioTranscriptionUtterance } from '@/lib/db/schema';
 
-type DeepgramUtterance = {
-  start: number;
-  end: number;
-  transcript: string;
-  speaker: number;
-};
+type DeepgramUtterance = AudioTranscriptionUtterance;
 
 type DeepgramResponse = {
   results?: {
@@ -18,19 +16,40 @@ type DeepgramResponse = {
   };
 };
 
-export type AudioTranscriptionResult = {
-  text: string;
-  utterances: DeepgramUtterance[];
+type AudioTranscriptionInput = {
+  audioUrl: string;
+  userId: string;
+  fileName: string | null;
 };
 
-export async function transcribeAudioWorkflow(audioUrl: string) {
+export type AudioTranscriptionResult = {
+  id: string;
+  runId: string;
+  fileName: string | null;
+  transcript: string;
+  utterances: DeepgramUtterance[];
+  speakerNames: Record<string, string>;
+  createdAt: Date;
+};
+
+export async function transcribeAudioWorkflow(input: AudioTranscriptionInput) {
   'use workflow';
-  const transcription = await transcribeAudioStep(audioUrl);
-  await cleanupAudioBlobStep(audioUrl);
-  return transcription;
+  const { workflowRunId } = getWorkflowMetadata();
+  const transcription = await transcribeAudioStep(input.audioUrl);
+  const saved = await saveTranscriptionStep({
+    userId: input.userId,
+    runId: workflowRunId,
+    fileName: input.fileName,
+    transcript: transcription.transcript,
+    utterances: transcription.utterances,
+  });
+  await cleanupAudioBlobStep(input.audioUrl);
+  return saved;
 }
 
-async function transcribeAudioStep(audioUrl: string): Promise<AudioTranscriptionResult> {
+async function transcribeAudioStep(
+  audioUrl: string,
+): Promise<{ transcript: string; utterances: DeepgramUtterance[] }> {
   'use step';
   const response = await fetch(
     'https://api.deepgram.com/v1/listen?model=nova-2-meeting&smart_format=true&punctuate=true&diarize=true&utterances=true',
@@ -52,14 +71,38 @@ async function transcribeAudioStep(audioUrl: string): Promise<AudioTranscription
   }
 
   const data = (await response.json()) as DeepgramResponse;
-  const text =
+  const transcript =
     data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? '';
   const utterances = data.results?.utterances ?? [];
 
   return {
-    text,
+    transcript,
     utterances,
   };
+}
+
+async function saveTranscriptionStep({
+  userId,
+  runId,
+  fileName,
+  transcript,
+  utterances,
+}: {
+  userId: string;
+  runId: string;
+  fileName: string | null;
+  transcript: string;
+  utterances: DeepgramUtterance[];
+}): Promise<AudioTranscriptionResult> {
+  'use step';
+  return await createAudioTranscription({
+    userId,
+    runId,
+    fileName,
+    transcript,
+    utterances,
+    speakerNames: {},
+  });
 }
 
 async function cleanupAudioBlobStep(audioUrl: string): Promise<void> {

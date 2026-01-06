@@ -34,6 +34,8 @@ import {
   type Agent,
   agentVectorStoreFile,
   type AgentVectorStoreFile,
+  audioTranscription,
+  type AudioTranscriptionUtterance,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact';
 import { generateUUID } from '../utils';
@@ -955,4 +957,115 @@ export async function getSavedAgentsByUserId({
       'Failed to list saved agents',
     );
   }
+}
+
+export async function createAudioTranscription({
+  userId,
+  runId,
+  fileName,
+  transcript,
+  utterances,
+  speakerNames,
+}: {
+  userId: string;
+  runId: string;
+  fileName: string | null;
+  transcript: string;
+  utterances: AudioTranscriptionUtterance[];
+  speakerNames: Record<string, string>;
+}) {
+  const [created] = await db
+    .insert(audioTranscription)
+    .values({
+      userId,
+      runId,
+      fileName,
+      transcript,
+      utterances,
+      speakerNames,
+    })
+    .returning({
+      id: audioTranscription.id,
+      runId: audioTranscription.runId,
+      fileName: audioTranscription.fileName,
+      transcript: audioTranscription.transcript,
+      utterances: audioTranscription.utterances,
+      speakerNames: audioTranscription.speakerNames,
+      createdAt: audioTranscription.createdAt,
+    });
+
+  return created;
+}
+
+export async function listAudioTranscriptionsByUserId({
+  userId,
+  limit = 20,
+}: {
+  userId: string;
+  limit?: number;
+}) {
+  return await db
+    .select({
+      id: audioTranscription.id,
+      fileName: audioTranscription.fileName,
+      createdAt: audioTranscription.createdAt,
+    })
+    .from(audioTranscription)
+    .where(eq(audioTranscription.userId, userId))
+    .orderBy(desc(audioTranscription.createdAt))
+    .limit(limit);
+}
+
+export async function getAudioTranscriptionById({
+  id,
+  userId,
+}: {
+  id: string;
+  userId: string;
+}) {
+  const [record] = await db
+    .select({
+      id: audioTranscription.id,
+      runId: audioTranscription.runId,
+      fileName: audioTranscription.fileName,
+      transcript: audioTranscription.transcript,
+      utterances: audioTranscription.utterances,
+      speakerNames: audioTranscription.speakerNames,
+      createdAt: audioTranscription.createdAt,
+    })
+    .from(audioTranscription)
+    .where(
+      and(eq(audioTranscription.id, id), eq(audioTranscription.userId, userId)),
+    )
+    .limit(1);
+
+  return record || null;
+}
+
+export async function updateAudioTranscriptionSpeakerNames({
+  id,
+  userId,
+  speakerNames,
+}: {
+  id: string;
+  userId: string;
+  speakerNames: Record<string, string>;
+}) {
+  const [updated] = await db
+    .update(audioTranscription)
+    .set({ speakerNames })
+    .where(
+      and(eq(audioTranscription.id, id), eq(audioTranscription.userId, userId)),
+    )
+    .returning({
+      id: audioTranscription.id,
+      runId: audioTranscription.runId,
+      fileName: audioTranscription.fileName,
+      transcript: audioTranscription.transcript,
+      utterances: audioTranscription.utterances,
+      speakerNames: audioTranscription.speakerNames,
+      createdAt: audioTranscription.createdAt,
+    });
+
+  return updated || null;
 }
