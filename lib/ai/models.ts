@@ -15,10 +15,10 @@ export interface ChatModel {
 export const chatModels = [
   {
     id: 'chat-model',
-    name: 'GPT-5',
-    description: 'Unified chat + reasoning (OpenAI gpt-5)',
+    name: 'GPT-5.2',
+    description: 'Unified chat + reasoning (OpenAI gpt-5.2)',
     provider: 'openai',
-    providerModelId: 'openai/gpt-5',
+    providerModelId: 'openai/gpt-5.2',
     capabilities: {
       liveSearch: false,
       fileSearch: true,
@@ -26,10 +26,10 @@ export const chatModels = [
   },
   {
     id: 'chat-model-grok-4-fast-reasoning',
-    name: 'Grok 4 (Fast)',
+    name: 'Grok 4.1 (Fast)',
     description: 'Fast multimodal reasoning from X AI',
     provider: 'xai',
-    providerModelId: 'xai/grok-4-fast-reasoning',
+    providerModelId: 'xai/grok-4-1-fast-reasoning',
     capabilities: {
       liveSearch: true,
       fileSearch: false,

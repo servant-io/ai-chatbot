@@ -55,7 +55,7 @@ export async function createAuthenticatedContext({
   await chatPage.createNewChat();
   // Only one model now; ensure selector shows unified model
   await chatPage.chooseModelFromSelector('chat-model');
-  await expect(chatPage.getSelectedModel()).resolves.toEqual('gpt-5');
+  await expect(chatPage.getSelectedModel()).resolves.toEqual('gpt-5.2');
 
   await page.waitForTimeout(1000);
   await context.storageState({ path: storageFile });
