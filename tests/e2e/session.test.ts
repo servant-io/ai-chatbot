@@ -1,3 +1,5 @@
+import type { Request as PlaywrightRequest } from '@playwright/test';
+
 import { expect, test } from '../fixtures';
 import { AuthPage } from '../pages/auth';
 import { generateRandomTestUser } from '../helpers';
@@ -13,7 +15,7 @@ test.describe
         throw new Error('Failed to load page');
       }
 
-      let request = response.request();
+      let request: PlaywrightRequest | null = response.request();
 
       const chain = [];
 
@@ -55,7 +57,7 @@ test.describe
         throw new Error('Failed to load page');
       }
 
-      let request = response.request();
+      let request: PlaywrightRequest | null = response.request();
 
       const chain = [];
 
