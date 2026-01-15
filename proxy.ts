@@ -56,10 +56,10 @@ export default async function proxy(
   }
 
   const response = await authMiddleware(request, event);
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
+  return new Response(response!.body, {
+    status: response!.status,
+    statusText: response!.statusText,
+    headers: response!.headers,
   });
 }
 
