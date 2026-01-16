@@ -2,9 +2,35 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 
+const redactHeaders = (
+  headers: Headers,
+): Record<string, string | undefined> => {
+  const rawHeaders = Object.fromEntries(headers.entries());
+  return {
+    ...rawHeaders,
+    authorization: rawHeaders.authorization ? '[redacted]' : undefined,
+    cookie: rawHeaders.cookie ? '[redacted]' : undefined,
+    'x-workos-session': rawHeaders['x-workos-session']
+      ? '[redacted]'
+      : undefined,
+  };
+};
+
 export async function GET(request: NextRequest) {
   try {
-    const { user } = await withAuth();
+    console.log('[transcripts] request', {
+      method: request.method,
+      url: request.url,
+      headers: redactHeaders(request.headers),
+    });
+
+    const session = await withAuth();
+    console.log('[transcripts] withAuth', {
+      ...session,
+      accessToken: session.accessToken ? '[redacted]' : session.accessToken,
+    });
+
+    const { user } = session;
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -53,12 +79,21 @@ export async function GET(request: NextRequest) {
       ]);
     }
 
-    const { count } = await countQuery;
+    const { count, error: countError } = await countQuery;
+    console.log('[transcripts] countQuery', {
+      count,
+      error: countError,
+    });
 
     // Get paginated results
     const { data, error } = await baseQuery
       .order('recording_start', { ascending: false })
       .range(offset, offset + limit - 1);
+
+    console.log('[transcripts] dataQuery', {
+      data,
+      error,
+    });
 
     if (error) {
       console.error('Database error:', error);

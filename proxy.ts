@@ -36,11 +36,32 @@ const authMiddleware = authkitMiddleware({
   debug: true,
 });
 
+const redactHeaders = (
+  headers: Headers,
+): Record<string, string | undefined> => {
+  const rawHeaders = Object.fromEntries(headers.entries());
+  return {
+    ...rawHeaders,
+    authorization: rawHeaders.authorization ? '[redacted]' : undefined,
+    cookie: rawHeaders.cookie ? '[redacted]' : undefined,
+    'x-workos-session': rawHeaders['x-workos-session']
+      ? '[redacted]'
+      : undefined,
+  };
+};
+
 export default async function proxy(
   request: NextRequest,
   event: NextFetchEvent,
 ) {
   const pathname = request.nextUrl.pathname;
+
+  console.log('[proxy] request', {
+    method: request.method,
+    url: request.url,
+    pathname,
+    headers: redactHeaders(request.headers),
+  });
 
   if (
     pathname === '/mcp' ||
@@ -48,6 +69,7 @@ export default async function proxy(
     pathname === '/message' ||
     pathname.startsWith('/.well-known/oauth-protected-resource')
   ) {
+    console.log('[proxy] bypass auth for path', pathname);
     return new Response(null, {
       headers: {
         'x-middleware-next': '1',
@@ -56,6 +78,25 @@ export default async function proxy(
   }
 
   const response = await authMiddleware(request, event);
+  const responseHeaders = response
+    ? Object.fromEntries(response.headers.entries())
+    : null;
+  const redactedResponseHeaders = responseHeaders
+    ? {
+        ...responseHeaders,
+        'set-cookie': responseHeaders['set-cookie']
+          ? '[redacted]'
+          : undefined,
+      }
+    : null;
+
+  console.log('[proxy] authMiddleware response', {
+    hasResponse: Boolean(response),
+    status: response?.status,
+    statusText: response?.statusText,
+    headers: redactedResponseHeaders,
+  });
+
   return new Response(response!.body, {
     status: response!.status,
     statusText: response!.statusText,
