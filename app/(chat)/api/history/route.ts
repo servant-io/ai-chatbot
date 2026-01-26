@@ -17,6 +17,28 @@ const redactHeaders = (
   };
 };
 
+const getConstructorName = (value: unknown) => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const constructor = (value as { constructor?: { name?: string } })
+    .constructor;
+
+  return typeof constructor?.name === 'string' ? constructor.name : null;
+};
+
+const logResponse = (label: string, response: unknown) => {
+  console.log('[history] response', {
+    label,
+    type: typeof response,
+    isResponse: response instanceof Response,
+    constructorName: getConstructorName(response),
+    tag: Object.prototype.toString.call(response),
+  });
+  console.log('[history] response raw', response);
+};
+
 export async function GET(request: NextRequest) {
   console.log('[history] request', {
     method: request.method,
@@ -31,10 +53,12 @@ export async function GET(request: NextRequest) {
   const endingBefore = searchParams.get('ending_before');
 
   if (startingAfter && endingBefore) {
-    return new ChatSDKError(
+    const response = new ChatSDKError(
       'bad_request:api',
       'Only one of starting_after or ending_before can be provided.',
     ).toResponse();
+    logResponse('bad_request:api:invalid_pagination', response);
+    return response;
   }
 
   const session = await withAuth();
@@ -44,7 +68,9 @@ export async function GET(request: NextRequest) {
   });
 
   if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
+    const response = new ChatSDKError('unauthorized:chat').toResponse();
+    logResponse('unauthorized:chat', response);
+    return response;
   }
 
   try {
@@ -59,10 +85,12 @@ export async function GET(request: NextRequest) {
     console.log('[history] databaseUser', databaseUser);
 
     if (!databaseUser) {
-      return new ChatSDKError(
+      const response = new ChatSDKError(
         'not_found:history',
         'User not found',
       ).toResponse();
+      logResponse('not_found:history', response);
+      return response;
     }
 
     const chats = await getChatsByUserId({
@@ -74,12 +102,16 @@ export async function GET(request: NextRequest) {
 
     console.log('[history] chats', chats);
 
-    return Response.json(chats);
+    const response = Response.json(chats);
+    logResponse('history:success', response);
+    return response;
   } catch (error) {
     console.error('Error in history API:', error);
-    return new ChatSDKError(
+    const response = new ChatSDKError(
       'bad_request:database',
       'Database error',
     ).toResponse();
+    logResponse('bad_request:database', response);
+    return response;
   }
 }
