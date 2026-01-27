@@ -1,6 +1,8 @@
 import { withAuth } from '@workos-inc/authkit-nextjs';
+import { NextResponse } from 'next/server';
 import { getDatabaseUserFromWorkOS, getChatWithAgent } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
+import { toNextResponse } from '@/lib/server/next-response';
 
 export async function GET(
   request: Request,
@@ -19,16 +21,18 @@ export async function GET(
     });
 
     if (!databaseUser) {
-      return new ChatSDKError(
-        'unauthorized:chat',
-        'User not found',
-      ).toResponse();
+      return toNextResponse(
+        new ChatSDKError(
+          'unauthorized:chat',
+          'User not found',
+        ).toResponse(),
+      );
     }
 
     const chatData = await getChatWithAgent(id, databaseUser.id);
 
     if (chatData?.agent) {
-      return Response.json({
+      return NextResponse.json({
         agentName: chatData.agent.name,
         agentDescription: chatData.agent.description,
         agentPrompt: chatData.agent.agentPrompt,
@@ -36,13 +40,13 @@ export async function GET(
       });
     }
 
-    return Response.json(null);
+    return NextResponse.json(null);
   } catch (error) {
     if (error instanceof ChatSDKError) {
-      return error.toResponse();
+      return toNextResponse(error.toResponse());
     }
 
     console.error('Unhandled error in chat agent API:', error);
-    return new ChatSDKError('offline:chat').toResponse();
+    return toNextResponse(new ChatSDKError('offline:chat').toResponse());
   }
 }

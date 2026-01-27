@@ -1,25 +1,31 @@
 import { withAuth } from '@workos-inc/authkit-nextjs';
+import { NextResponse } from 'next/server';
 import {
   getDatabaseUserFromWorkOS,
   getSuggestionsByDocumentId,
 } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
+import { toNextResponse } from '@/lib/server/next-response';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const documentId = searchParams.get('documentId');
 
   if (!documentId) {
-    return new ChatSDKError(
-      'bad_request:api',
-      'Parameter documentId is required.',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'bad_request:api',
+        'Parameter documentId is required.',
+      ).toResponse(),
+    );
   }
 
   const session = await withAuth();
 
   if (!session?.user) {
-    return new ChatSDKError('unauthorized:suggestions').toResponse();
+    return toNextResponse(
+      new ChatSDKError('unauthorized:suggestions').toResponse(),
+    );
   }
 
   // Get the database user from the WorkOS user
@@ -31,10 +37,12 @@ export async function GET(request: Request) {
   });
 
   if (!databaseUser) {
-    return new ChatSDKError(
-      'unauthorized:suggestions',
-      'User not found',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'unauthorized:suggestions',
+        'User not found',
+      ).toResponse(),
+    );
   }
 
   const suggestions = await getSuggestionsByDocumentId({
@@ -44,12 +52,12 @@ export async function GET(request: Request) {
   const [suggestion] = suggestions;
 
   if (!suggestion) {
-    return Response.json([], { status: 200 });
+    return NextResponse.json([], { status: 200 });
   }
 
   if (suggestion.userId !== databaseUser.id) {
-    return new ChatSDKError('forbidden:api').toResponse();
+    return toNextResponse(new ChatSDKError('forbidden:api').toResponse());
   }
 
-  return Response.json(suggestions, { status: 200 });
+  return NextResponse.json(suggestions, { status: 200 });
 }

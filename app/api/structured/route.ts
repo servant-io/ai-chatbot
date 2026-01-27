@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { generateObject } from 'ai';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { SchemaDefinition } from '@/app/structured/types';
 
@@ -58,25 +59,19 @@ export async function POST(req: Request) {
         : { schema }),
     });
 
-    return new Response(JSON.stringify({ result: response.object }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return NextResponse.json({ result: response.object }, { status: 200 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return new Response(
-        JSON.stringify({
-          error: 'Invalid request payload',
-          details: error.issues,
-        }),
+      return NextResponse.json(
+        { error: 'Invalid request payload', details: error.issues },
         { status: 400 },
       );
     }
 
     console.error('Structured generation failed', error);
 
-    return new Response(
-      JSON.stringify({ error: 'Failed to generate structured response' }),
+    return NextResponse.json(
+      { error: 'Failed to generate structured response' },
       { status: 500 },
     );
   }

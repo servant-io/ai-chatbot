@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   }
 
   if (request.body === null) {
-    return new Response('Request body is empty', { status: 400 });
+    return new NextResponse('Request body is empty', { status: 400 });
   }
 
   try {

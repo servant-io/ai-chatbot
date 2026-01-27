@@ -17,9 +17,6 @@ export async function GET(
 
     // Role-based access check - members cannot access full transcript content
     if (session.role === 'member') {
-      console.log(
-        `🚫 Member ${session.user.email} attempted to access transcript ${id} via API`,
-      );
       return NextResponse.json(
         {
           error:
@@ -29,9 +26,6 @@ export async function GET(
       );
     }
 
-    console.log(
-      `✅ User with role '${session.role}' (${session.user.email}) accessing transcript ${id} via API`,
-    );
     const transcriptId = Number.parseInt(id);
     if (Number.isNaN(transcriptId)) {
       return NextResponse.json(

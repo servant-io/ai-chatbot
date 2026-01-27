@@ -1,4 +1,5 @@
 import { withAuth } from '@workos-inc/authkit-nextjs';
+import { NextResponse } from 'next/server';
 import {
   getChatById,
   getDatabaseUserFromWorkOS,
@@ -7,6 +8,7 @@ import {
 } from '@/lib/db/queries';
 import type { Chat } from '@/lib/db/schema';
 import { ChatSDKError } from '@/lib/errors';
+import { toNextResponse } from '@/lib/server/next-response';
 import type { ChatMessage } from '@/lib/types';
 import { createUIMessageStream, JsonToSseTransformStream } from 'ai';
 import { getStreamContext } from '../../route';
@@ -22,17 +24,19 @@ export async function GET(
   const resumeRequestedAt = new Date();
 
   if (!streamContext) {
-    return new Response(null, { status: 204 });
+    return new NextResponse(null, { status: 204 });
   }
 
   if (!chatId) {
-    return new ChatSDKError('bad_request:api').toResponse();
+    return toNextResponse(new ChatSDKError('bad_request:api').toResponse());
   }
 
   const session = await withAuth();
 
   if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
+    return toNextResponse(
+      new ChatSDKError('unauthorized:chat').toResponse(),
+    );
   }
 
   // Get the database user from the WorkOS user
@@ -44,7 +48,9 @@ export async function GET(
   });
 
   if (!databaseUser) {
-    return new ChatSDKError('unauthorized:chat', 'User not found').toResponse();
+    return toNextResponse(
+      new ChatSDKError('unauthorized:chat', 'User not found').toResponse(),
+    );
   }
 
   let chat: Chat | null;
@@ -52,27 +58,27 @@ export async function GET(
   try {
     chat = await getChatById({ id: chatId });
   } catch {
-    return new ChatSDKError('not_found:chat').toResponse();
+    return toNextResponse(new ChatSDKError('not_found:chat').toResponse());
   }
 
   if (!chat) {
-    return new ChatSDKError('not_found:chat').toResponse();
+    return toNextResponse(new ChatSDKError('not_found:chat').toResponse());
   }
 
   if (chat.visibility === 'private' && chat.userId !== databaseUser.id) {
-    return new ChatSDKError('forbidden:chat').toResponse();
+    return toNextResponse(new ChatSDKError('forbidden:chat').toResponse());
   }
 
   const streamIds = await getStreamIdsByChatId({ chatId });
 
   if (!streamIds.length) {
-    return new ChatSDKError('not_found:stream').toResponse();
+    return toNextResponse(new ChatSDKError('not_found:stream').toResponse());
   }
 
   const recentStreamId = streamIds.at(-1);
 
   if (!recentStreamId) {
-    return new ChatSDKError('not_found:stream').toResponse();
+    return toNextResponse(new ChatSDKError('not_found:stream').toResponse());
   }
 
   const emptyDataStream = createUIMessageStream<ChatMessage>({
@@ -92,17 +98,17 @@ export async function GET(
     const mostRecentMessage = messages.at(-1);
 
     if (!mostRecentMessage) {
-      return new Response(emptyDataStream, { status: 200 });
+      return new NextResponse(emptyDataStream, { status: 200 });
     }
 
     if (mostRecentMessage.role !== 'assistant') {
-      return new Response(emptyDataStream, { status: 200 });
+      return new NextResponse(emptyDataStream, { status: 200 });
     }
 
     const messageCreatedAt = new Date(mostRecentMessage.createdAt);
 
     if (differenceInSeconds(resumeRequestedAt, messageCreatedAt) > 15) {
-      return new Response(emptyDataStream, { status: 200 });
+      return new NextResponse(emptyDataStream, { status: 200 });
     }
 
     const restoredStream = createUIMessageStream<ChatMessage>({
@@ -115,11 +121,11 @@ export async function GET(
       },
     });
 
-    return new Response(
+    return new NextResponse(
       restoredStream.pipeThrough(new JsonToSseTransformStream()),
       { status: 200 },
     );
   }
 
-  return new Response(stream, { status: 200 });
+  return new NextResponse(stream, { status: 200 });
 }

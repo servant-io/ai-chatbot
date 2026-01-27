@@ -55,8 +55,9 @@ import {
   createResumableStreamContext,
   type ResumableStreamContext,
 } from 'resumable-stream';
-import { after } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { ChatSDKError } from '@/lib/errors';
+import { toNextResponse } from '@/lib/server/next-response';
 import type { ChatMessage } from '@/lib/types';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { openai, type OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
@@ -104,23 +105,10 @@ export async function POST(request: Request) {
         method: request.method,
       });
     }
-    return new ChatSDKError('bad_request:api').toResponse();
+    return toNextResponse(new ChatSDKError('bad_request:api').toResponse());
   }
 
   try {
-    if (isDevelopmentEnvironment) {
-      console.log('🧪 Processing chat request:', {
-        requestBody: {
-          id: requestBody.id,
-          messageId: requestBody.message?.id,
-          agentSlug: requestBody.agentSlug,
-          selectedVisibilityType: requestBody.selectedVisibilityType,
-          activeTools: requestBody.activeTools,
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     const {
       id,
       message,
@@ -157,7 +145,9 @@ export async function POST(request: Request) {
           timestamp: new Date().toISOString(),
         });
       }
-      return new ChatSDKError('unauthorized:chat').toResponse();
+      return toNextResponse(
+        new ChatSDKError('unauthorized:chat').toResponse(),
+      );
     }
 
     // Get the database user from the WorkOS user
@@ -176,10 +166,12 @@ export async function POST(request: Request) {
           timestamp: new Date().toISOString(),
         });
       }
-      return new ChatSDKError(
-        'unauthorized:chat',
-        'User not found',
-      ).toResponse();
+      return toNextResponse(
+        new ChatSDKError(
+          'unauthorized:chat',
+          'User not found',
+        ).toResponse(),
+      );
     }
 
     // Fetch agent data if agentSlug provided; otherwise allow preview agent context passthrough
@@ -196,14 +188,6 @@ export async function POST(request: Request) {
 
     const chat = await getChatById({ id });
 
-    // Debug: confirm preview agent context is received
-    if (!agentSlug && previewAgentContext) {
-      console.log('🧪 Preview agentContext received:', {
-        hasName: !!previewAgentContext.agentName,
-        hasPrompt: !!previewAgentContext.agentPrompt,
-      });
-    }
-
     if (!chat) {
       const title = await generateTitleFromUserMessage({
         message,
@@ -218,7 +202,7 @@ export async function POST(request: Request) {
       });
     } else {
       if (chat.userId !== databaseUser.id) {
-        return new ChatSDKError('forbidden:chat').toResponse();
+        return toNextResponse(new ChatSDKError('forbidden:chat').toResponse());
       }
     }
 
@@ -255,11 +239,7 @@ export async function POST(request: Request) {
 
     const streamId = generateUUID();
     await createStreamId({ streamId, chatId: id });
-    // Check role for tool availability
     const isMemberRole = session.role === 'member';
-    console.log(
-      `🔐 User ${session.user.email} role: ${session.role} (${isMemberRole ? 'MEMBER - limited access' : 'ELEVATED - full access'})`,
-    );
 
     // Create session adapter for AI tools with database user ID
     const aiToolsSession = {
@@ -367,31 +347,17 @@ export async function POST(request: Request) {
 
         if (resolvedVectorStoreId) {
           if (fileSearchRegistered) {
-            console.log(
-              `🗂️ Enabling file_search tool for vector store ${resolvedVectorStoreId}`,
-            );
             nonConfigurableToolIds.add('file_search');
-          } else if (isXaiModel) {
-            console.log(
-              `🤖 Skipping OpenAI file_search tool for ${providerModelId}; using get_file_contents fallback only.`,
-            );
           }
           nonConfigurableToolIds.add('get_file_contents');
         }
 
         // Add transcript details tool only for elevated roles (not members)
         if (!isMemberRole) {
-          console.log(
-            `✅ Adding getTranscriptDetails tool for elevated role: ${session.role} (${session.user.email})`,
-          );
           tools.getTranscriptDetails = getTranscriptDetails({
             session: aiToolsSession,
             dataStream,
           });
-        } else {
-          console.log(
-            `🚫 Excluding getTranscriptDetails tool for member role: ${session.user.email}`,
-          );
         }
 
         // 1) Validate the full UI history against your tool schemas
@@ -414,13 +380,6 @@ export async function POST(request: Request) {
 
         // 2) Convert to model messages with the same tool registry
         const modelMessages = convertToModelMessages(validated, { tools });
-
-        if (isDevelopmentEnvironment) {
-          console.log(
-            '🧪 Model messages:',
-            JSON.stringify(modelMessages, null, 2),
-          );
-        }
 
         const providerOptions: SharedV2ProviderOptions = {};
 
@@ -503,10 +462,6 @@ export async function POST(request: Request) {
           },
         });
 
-        if (isDevelopmentEnvironment) {
-          console.log('🧪 Starting streamText execution...');
-        }
-
         result.consumeStream();
         dataStream.merge(
           result.toUIMessageStream({
@@ -561,17 +516,19 @@ export async function POST(request: Request) {
     const streamContext = getStreamContext();
 
     if (streamContext) {
-      return new Response(
+      return new NextResponse(
         await streamContext.resumableStream(streamId, () =>
           stream.pipeThrough(new JsonToSseTransformStream()),
         ),
       );
     } else {
-      return new Response(stream.pipeThrough(new JsonToSseTransformStream()));
+      return new NextResponse(
+        stream.pipeThrough(new JsonToSseTransformStream()),
+      );
     }
   } catch (error) {
     if (error instanceof ChatSDKError) {
-      return error.toResponse();
+      return toNextResponse(error.toResponse());
     }
 
     if (isDevelopmentEnvironment) {
@@ -594,7 +551,7 @@ export async function POST(request: Request) {
     } else {
       console.error('Unhandled error in chat API:', error);
     }
-    return new ChatSDKError('offline:chat').toResponse();
+    return toNextResponse(new ChatSDKError('offline:chat').toResponse());
   }
 }
 
@@ -603,13 +560,15 @@ export async function DELETE(request: Request) {
   const id = searchParams.get('id');
 
   if (!id) {
-    return new ChatSDKError('bad_request:api').toResponse();
+    return toNextResponse(new ChatSDKError('bad_request:api').toResponse());
   }
 
   const session = await withAuth();
 
   if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
+    return toNextResponse(
+      new ChatSDKError('unauthorized:chat').toResponse(),
+    );
   }
 
   // Get the database user from the WorkOS user
@@ -621,16 +580,18 @@ export async function DELETE(request: Request) {
   });
 
   if (!databaseUser) {
-    return new ChatSDKError('unauthorized:chat', 'User not found').toResponse();
+    return toNextResponse(
+      new ChatSDKError('unauthorized:chat', 'User not found').toResponse(),
+    );
   }
 
   const chat = await getChatById({ id });
 
   if (chat?.userId !== session.user.id) {
-    return new ChatSDKError('forbidden:chat').toResponse();
+    return toNextResponse(new ChatSDKError('forbidden:chat').toResponse());
   }
 
   const deletedChat = await deleteChatById({ id });
 
-  return Response.json(deletedChat, { status: 200 });
+  return NextResponse.json(deletedChat, { status: 200 });
 }

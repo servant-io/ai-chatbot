@@ -1,4 +1,5 @@
 import { withAuth } from '@workos-inc/authkit-nextjs';
+import { NextResponse } from 'next/server';
 import type { ArtifactKind } from '@/components/artifact';
 import {
   deleteDocumentsByIdAfterTimestamp,
@@ -7,22 +8,27 @@ import {
   saveDocument,
 } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
+import { toNextResponse } from '@/lib/server/next-response';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
   if (!id) {
-    return new ChatSDKError(
-      'bad_request:api',
-      'Parameter id is missing',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'bad_request:api',
+        'Parameter id is missing',
+      ).toResponse(),
+    );
   }
 
   const session = await withAuth();
 
   if (!session?.user) {
-    return new ChatSDKError('unauthorized:document').toResponse();
+    return toNextResponse(
+      new ChatSDKError('unauthorized:document').toResponse(),
+    );
   }
 
   // Get the database user from the WorkOS user
@@ -34,10 +40,12 @@ export async function GET(request: Request) {
   });
 
   if (!databaseUser) {
-    return new ChatSDKError(
-      'unauthorized:document',
-      'User not found',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'unauthorized:document',
+        'User not found',
+      ).toResponse(),
+    );
   }
 
   const documents = await getDocumentsById({ id });
@@ -45,14 +53,18 @@ export async function GET(request: Request) {
   const [document] = documents;
 
   if (!document) {
-    return new ChatSDKError('not_found:document').toResponse();
+    return toNextResponse(
+      new ChatSDKError('not_found:document').toResponse(),
+    );
   }
 
   if (document.userId !== databaseUser.id) {
-    return new ChatSDKError('forbidden:document').toResponse();
+    return toNextResponse(
+      new ChatSDKError('forbidden:document').toResponse(),
+    );
   }
 
-  return Response.json(documents, { status: 200 });
+  return NextResponse.json(documents, { status: 200 });
 }
 
 export async function POST(request: Request) {
@@ -60,16 +72,20 @@ export async function POST(request: Request) {
   const id = searchParams.get('id');
 
   if (!id) {
-    return new ChatSDKError(
-      'bad_request:api',
-      'Parameter id is required.',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'bad_request:api',
+        'Parameter id is required.',
+      ).toResponse(),
+    );
   }
 
   const session = await withAuth();
 
   if (!session?.user) {
-    return new ChatSDKError('unauthorized:document').toResponse();
+    return toNextResponse(
+      new ChatSDKError('unauthorized:document').toResponse(),
+    );
   }
 
   // Get the database user from the WorkOS user
@@ -81,10 +97,12 @@ export async function POST(request: Request) {
   });
 
   if (!databaseUser) {
-    return new ChatSDKError(
-      'unauthorized:document',
-      'User not found',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'unauthorized:document',
+        'User not found',
+      ).toResponse(),
+    );
   }
 
   const {
@@ -100,7 +118,9 @@ export async function POST(request: Request) {
     const [document] = documents;
 
     if (document.userId !== databaseUser.id) {
-      return new ChatSDKError('forbidden:document').toResponse();
+      return toNextResponse(
+        new ChatSDKError('forbidden:document').toResponse(),
+      );
     }
   }
 
@@ -112,7 +132,7 @@ export async function POST(request: Request) {
     userId: databaseUser.id,
   });
 
-  return Response.json(document, { status: 200 });
+  return NextResponse.json(document, { status: 200 });
 }
 
 export async function DELETE(request: Request) {
@@ -121,23 +141,29 @@ export async function DELETE(request: Request) {
   const timestamp = searchParams.get('timestamp');
 
   if (!id) {
-    return new ChatSDKError(
-      'bad_request:api',
-      'Parameter id is required.',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'bad_request:api',
+        'Parameter id is required.',
+      ).toResponse(),
+    );
   }
 
   if (!timestamp) {
-    return new ChatSDKError(
-      'bad_request:api',
-      'Parameter timestamp is required.',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'bad_request:api',
+        'Parameter timestamp is required.',
+      ).toResponse(),
+    );
   }
 
   const session = await withAuth();
 
   if (!session?.user) {
-    return new ChatSDKError('unauthorized:document').toResponse();
+    return toNextResponse(
+      new ChatSDKError('unauthorized:document').toResponse(),
+    );
   }
 
   // Get the database user from the WorkOS user
@@ -149,10 +175,12 @@ export async function DELETE(request: Request) {
   });
 
   if (!databaseUser) {
-    return new ChatSDKError(
-      'unauthorized:document',
-      'User not found',
-    ).toResponse();
+    return toNextResponse(
+      new ChatSDKError(
+        'unauthorized:document',
+        'User not found',
+      ).toResponse(),
+    );
   }
 
   const documents = await getDocumentsById({ id });
@@ -160,7 +188,9 @@ export async function DELETE(request: Request) {
   const [document] = documents;
 
   if (document.userId !== databaseUser.id) {
-    return new ChatSDKError('forbidden:document').toResponse();
+    return toNextResponse(
+      new ChatSDKError('forbidden:document').toResponse(),
+    );
   }
 
   const documentsDeleted = await deleteDocumentsByIdAfterTimestamp({
@@ -168,5 +198,5 @@ export async function DELETE(request: Request) {
     timestamp: new Date(timestamp),
   });
 
-  return Response.json(documentsDeleted, { status: 200 });
+  return NextResponse.json(documentsDeleted, { status: 200 });
 }
