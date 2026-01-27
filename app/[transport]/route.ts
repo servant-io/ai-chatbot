@@ -4,11 +4,22 @@ import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod/v4';
 
 import { verifyToken } from '@/lib/mcp/with-authkit';
+import { createDownloadToken } from '@/lib/mcp/download-token';
 
 const getUserEmail = (authInfo?: AuthInfo): string | undefined => {
   const email = authInfo?.extra?.email;
 
   return typeof email === 'string' ? email : undefined;
+};
+
+const getUserRole = (authInfo?: AuthInfo): string | null => {
+  const role = authInfo?.extra?.role;
+  return typeof role === 'string' ? role : null;
+};
+
+const getUserId = (authInfo?: AuthInfo): string | undefined => {
+  const userId = authInfo?.extra?.userId;
+  return typeof userId === 'string' ? userId : undefined;
 };
 
 const handler = createMcpHandler(
@@ -46,6 +57,7 @@ const handler = createMcpHandler(
         extra,
       ) => {
         const email = getUserEmail(extra.authInfo);
+        const role = getUserRole(extra.authInfo);
 
         if (!email) {
           return {
@@ -87,8 +99,14 @@ const handler = createMcpHandler(
             'id, recording_start, summary, projects, clients, meeting_type, extracted_participants',
           )
           .order('recording_start', { ascending: false })
-          .limit(lim)
-          .contains('verified_participant_emails', [email]);
+          .limit(lim);
+
+        // Apply participant filter based on role
+        // admin: no filter (sees all)
+        // org-fte, member: filter by participant
+        if (role !== 'admin') {
+          query = query.contains('verified_participant_emails', [email]);
+        }
 
         if (start_date) query = query.gte('recording_start', start_date);
         if (end_date) {
@@ -204,6 +222,7 @@ const handler = createMcpHandler(
         extra,
       ) => {
         const email = getUserEmail(extra.authInfo);
+        const role = getUserRole(extra.authInfo);
 
         if (!email) {
           return {
@@ -242,8 +261,14 @@ const handler = createMcpHandler(
             'id, recording_start, summary, projects, clients, meeting_type, extracted_participants, host_email, verified_participant_emails',
           )
           .order('recording_start', { ascending: false })
-          .limit(lim)
-          .contains('verified_participant_emails', [email]);
+          .limit(lim);
+
+        // Apply participant filter based on role
+        // admin: no filter (sees all)
+        // org-fte, member: filter by participant
+        if (role !== 'admin') {
+          query = query.contains('verified_participant_emails', [email]);
+        }
 
         if (start_date) query = query.gte('recording_start', start_date);
         if (end_date) {
@@ -284,6 +309,114 @@ const handler = createMcpHandler(
             {
               type: 'text',
               text: wrappedResult,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'get_transcript_download_url',
+      'Generates a secure download URL for a transcript. Use with curl to save directly to disk. Members cannot download transcripts.',
+      {
+        transcript_id: z
+          .number()
+          .int()
+          .describe('The ID of the transcript to download'),
+      },
+      async ({ transcript_id }, extra) => {
+        const email = getUserEmail(extra.authInfo);
+        const role = getUserRole(extra.authInfo);
+        const userId = getUserId(extra.authInfo);
+
+        if (!email || !userId) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Authentication required to download transcripts.',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Members cannot download transcripts
+        if (role === 'member') {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Access denied. Members cannot download transcript content.',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Supabase credentials not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify transcript exists and user has access
+        let query = supabase
+          .from('transcripts')
+          .select('id')
+          .eq('id', transcript_id);
+
+        // Apply participant filter for non-admin users
+        if (role !== 'admin') {
+          query = query.contains('verified_participant_emails', [email]);
+        }
+
+        const { data, error } = await query.single();
+
+        if (error || !data) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Transcript not found or you do not have access to it.',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Generate download token (5-min expiry)
+        const token = await createDownloadToken({
+          sub: userId,
+          email,
+          role: role || 'member',
+          transcriptId: transcript_id,
+        });
+
+        // Get the base URL from environment or construct from request
+        const baseUrl =
+          process.env.NEXT_PUBLIC_APP_URL ||
+          process.env.VERCEL_URL ||
+          'http://localhost:3000';
+
+        const downloadUrl = `${baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`}/api/transcripts/${transcript_id}/download?token=${token}`;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Download URL generated successfully (expires in 5 minutes).\n\nTo download the transcript, run:\n\ncurl -o transcript-${transcript_id}.md "${downloadUrl}"`,
             },
           ],
         };

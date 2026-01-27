@@ -31,6 +31,25 @@ export const verifyToken = async (
   const workos = getWorkOS();
   const user = await workos.userManagement.getUser(payload.sub);
 
+  // Fetch role from organization membership
+  let role: string | null = null;
+  const orgId = typeof payload.org_id === 'string' ? payload.org_id : null;
+
+  if (orgId) {
+    try {
+      const memberships = await workos.userManagement.listOrganizationMemberships({
+        userId: payload.sub,
+        organizationId: orgId,
+      });
+
+      if (memberships.data.length > 0) {
+        role = memberships.data[0].role?.slug || null;
+      }
+    } catch (err) {
+      console.error('🔐 MCP Auth - Failed to fetch org membership:', err);
+    }
+  }
+
   return {
     token: bearerToken,
     scopes: ['read:transcripts'],
@@ -42,6 +61,7 @@ export const verifyToken = async (
       firstName: user.firstName,
       lastName: user.lastName,
       claims: payload,
+      role,
     },
   };
 };

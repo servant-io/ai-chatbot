@@ -31,6 +31,7 @@ const authMiddleware = authkitMiddleware({
       '/sse',
       '/message',
       '/api/mcp',
+      '/api/transcripts/:id/download',
     ],
   },
   debug: true,
@@ -67,7 +68,8 @@ export default async function proxy(
     pathname === '/mcp' ||
     pathname === '/sse' ||
     pathname === '/message' ||
-    pathname.startsWith('/.well-known/oauth-protected-resource')
+    pathname.startsWith('/.well-known/oauth-protected-resource') ||
+    pathname.match(/^\/api\/transcripts\/\d+\/download$/)
   ) {
     console.log('[proxy] bypass auth for path', pathname);
     return new Response(null, {
