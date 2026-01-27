@@ -418,9 +418,10 @@ const handler = createMcpHandler(
           };
         }
 
-        // Get the base URL from environment or construct from request
+        // Get the base URL from environment - prefer explicit app URL, then production URL
         const baseUrl =
           process.env.NEXT_PUBLIC_APP_URL ||
+          process.env.VERCEL_PROJECT_PRODUCTION_URL ||
           process.env.VERCEL_URL ||
           'http://localhost:3000';
 
