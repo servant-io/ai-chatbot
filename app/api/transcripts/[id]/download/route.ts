@@ -67,8 +67,8 @@ export async function GET(
     )
     .eq('id', transcriptId);
 
-  // Apply participant filter for org-fte (admin sees all)
-  if (payload.role === 'org-fte') {
+  // Apply participant filter for non-admin roles (admin sees all)
+  if (payload.role !== 'admin') {
     query = query.contains('verified_participant_emails', [payload.email]);
   }
 

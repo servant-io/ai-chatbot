@@ -397,12 +397,26 @@ const handler = createMcpHandler(
         }
 
         // Generate download token (5-min expiry)
-        const token = await createDownloadToken({
-          sub: userId,
-          email,
-          role: role || 'member',
-          transcriptId: transcript_id,
-        });
+        let token: string;
+        try {
+          token = await createDownloadToken({
+            sub: userId,
+            email,
+            role: role || 'member',
+            transcriptId: transcript_id,
+          });
+        } catch (err) {
+          console.error('Failed to create download token:', err);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Server configuration error: unable to generate download token.',
+              },
+            ],
+            isError: true,
+          };
+        }
 
         // Get the base URL from environment or construct from request
         const baseUrl =
