@@ -1,10 +1,19 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 import { createMcpHandler, withMcpAuth } from 'mcp-handler';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod/v4';
 
 import { verifyToken } from '@/lib/mcp/with-authkit';
 import { createDownloadToken } from '@/lib/mcp/download-token';
+
+const EMPTY_OBJECT_JSON_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {},
+};
 
 const getUserEmail = (authInfo?: AuthInfo): string | undefined => {
   const email = authInfo?.extra?.email;
@@ -22,9 +31,14 @@ const getUserId = (authInfo?: AuthInfo): string | undefined => {
   return typeof userId === 'string' ? userId : undefined;
 };
 
+const isTranscriptDownloadRestrictedRole = (role: string | null): boolean =>
+  role === 'member';
+
 const handler = createMcpHandler(
   (server) => {
-    server.tool(
+    const registeredTools = new Map<string, RegisteredTool>();
+
+    const searchTranscriptsByKeywordTool = server.tool(
       'search_transcripts_by_keyword',
       'Search meeting transcripts by keyword with optional filters.',
       {
@@ -174,7 +188,12 @@ const handler = createMcpHandler(
       },
     );
 
-    server.tool(
+    registeredTools.set(
+      'search_transcripts_by_keyword',
+      searchTranscriptsByKeywordTool,
+    );
+
+    const searchTranscriptsByUserTool = server.tool(
       'search_transcripts_by_user',
       'Search meeting transcripts by host email or verified participant email.',
       {
@@ -315,7 +334,12 @@ const handler = createMcpHandler(
       },
     );
 
-    server.tool(
+    registeredTools.set(
+      'search_transcripts_by_user',
+      searchTranscriptsByUserTool,
+    );
+
+    const transcriptDownloadTool = server.tool(
       'get_transcript_download_url',
       'Generates a secure download URL for a transcript. Use with curl to save directly to disk. Members cannot download transcripts.',
       {
@@ -342,7 +366,7 @@ const handler = createMcpHandler(
         }
 
         // Members cannot download transcripts
-        if (role === 'member') {
+        if (isTranscriptDownloadRestrictedRole(role)) {
           return {
             content: [
               {
@@ -437,6 +461,60 @@ const handler = createMcpHandler(
         };
       },
     );
+
+    registeredTools.set('get_transcript_download_url', transcriptDownloadTool);
+
+    server.server.setRequestHandler(ListToolsRequestSchema, (_request, extra) => {
+      const role = getUserRole(extra?.authInfo);
+      const hideDownloadTool = isTranscriptDownloadRestrictedRole(role);
+
+      const tools = Array.from(registeredTools.entries())
+        .filter(
+          ([name, tool]) =>
+            tool.enabled &&
+            (name !== 'get_transcript_download_url' || !hideDownloadTool),
+        )
+        .map(([name, tool]) => {
+          const inputSchema = normalizeObjectSchema(tool.inputSchema);
+          const toolDefinition: {
+            name: string;
+            title?: string;
+            description?: string;
+            inputSchema: Record<string, unknown>;
+            annotations?: RegisteredTool['annotations'];
+            execution?: RegisteredTool['execution'];
+            _meta?: RegisteredTool['_meta'];
+            outputSchema?: Record<string, unknown>;
+          } = {
+            name,
+            title: tool.title,
+            description: tool.description,
+            inputSchema: inputSchema
+              ? toJsonSchemaCompat(inputSchema, {
+                  strictUnions: true,
+                  pipeStrategy: 'input',
+                })
+              : EMPTY_OBJECT_JSON_SCHEMA,
+            annotations: tool.annotations,
+            execution: tool.execution,
+            _meta: tool._meta,
+          };
+
+          if (tool.outputSchema) {
+            const outputSchema = normalizeObjectSchema(tool.outputSchema);
+            if (outputSchema) {
+              toolDefinition.outputSchema = toJsonSchemaCompat(outputSchema, {
+                strictUnions: true,
+                pipeStrategy: 'output',
+              });
+            }
+          }
+
+          return toolDefinition;
+        });
+
+      return { tools };
+    });
   },
   {},
   {

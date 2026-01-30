@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyDownloadToken } from '@/lib/mcp/download-token';
 
@@ -8,9 +8,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const transcriptId = parseInt(id, 10);
+    const transcriptId = Number.parseInt(id, 10);
 
-    if (isNaN(transcriptId)) {
+    if (Number.isNaN(transcriptId)) {
       return NextResponse.json(
         { error: 'Invalid transcript ID' },
         { status: 400 },
@@ -41,10 +41,13 @@ export async function GET(
       );
     }
 
-    // Check role - member is blocked from downloading
+    // Check role - members are blocked from downloading
     if (payload.role === 'member') {
       return NextResponse.json(
-        { error: 'Access denied. Members cannot download transcript content.' },
+        {
+          error:
+            'Access denied. Members cannot download transcript content.',
+        },
         { status: 403 },
       );
     }
