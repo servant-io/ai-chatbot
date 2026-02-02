@@ -1,5 +1,4 @@
 import { authkitMiddleware } from '@workos-inc/authkit-nextjs';
-import type { NextFetchEvent, NextRequest } from 'next/server';
 
 // Prefer explicit redirect URI; fall back to preview deployment URL
 const fallbackHost =
@@ -37,34 +36,7 @@ const authMiddleware = authkitMiddleware({
   debug: true,
 });
 
-export default async function proxy(
-  request: NextRequest,
-  event: NextFetchEvent,
-) {
-  const pathname = request.nextUrl.pathname;
-
-  if (
-    pathname === '/mcp' ||
-    pathname === '/sse' ||
-    pathname === '/message' ||
-    pathname.startsWith('/.well-known/oauth-protected-resource') ||
-    pathname.match(/^\/api\/transcripts\/\d+\/download$/)
-  ) {
-    return new Response(null, {
-      headers: {
-        'x-middleware-next': '1',
-      },
-    });
-  }
-
-  const response = await authMiddleware(request, event);
-
-  return new Response(response!.body, {
-    status: response!.status,
-    statusText: response!.statusText,
-    headers: response!.headers,
-  });
-}
+export default authMiddleware;
 
 export const config = {
   matcher: [
