@@ -5,7 +5,13 @@ import { ChatSDKError } from '@/lib/errors';
 import { toNextResponse } from '@/lib/server/next-response';
 
 export async function GET(request: NextRequest) {
-
+  console.log('history route request', {
+    url: request.url,
+    method: request.method,
+    headers: Object.fromEntries(request.headers),
+    xWorkosMiddleware: request.headers.get('x-workos-middleware'),
+    xMiddlewareSubrequest: request.headers.get('x-middleware-subrequest'),
+  });
   const { searchParams } = request.nextUrl;
 
   const limit = Number.parseInt(searchParams.get('limit') || '10');
@@ -22,6 +28,17 @@ export async function GET(request: NextRequest) {
   }
 
   const session = await withAuth();
+  console.log('history route session', {
+    user: session.user,
+    sessionId: session.sessionId,
+    organizationId: session.organizationId,
+    role: session.role,
+    roles: session.roles,
+    permissions: session.permissions,
+    entitlements: session.entitlements,
+    featureFlags: session.featureFlags,
+    impersonator: session.impersonator,
+  });
 
   if (!session?.user) {
     return toNextResponse(

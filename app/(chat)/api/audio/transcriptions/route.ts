@@ -6,7 +6,25 @@ import {
 } from '@/lib/db/queries';
 
 export async function GET(request: Request) {
+  console.log('audio transcriptions route request', {
+    url: request.url,
+    method: request.method,
+    headers: Object.fromEntries(request.headers),
+    xWorkosMiddleware: request.headers.get('x-workos-middleware'),
+    xMiddlewareSubrequest: request.headers.get('x-middleware-subrequest'),
+  });
   const session = await withAuth();
+  console.log('audio transcriptions route session', {
+    user: session.user,
+    sessionId: session.sessionId,
+    organizationId: session.organizationId,
+    role: session.role,
+    roles: session.roles,
+    permissions: session.permissions,
+    entitlements: session.entitlements,
+    featureFlags: session.featureFlags,
+    impersonator: session.impersonator,
+  });
 
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -3,8 +3,26 @@ import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 
 export async function GET(request: NextRequest) {
+  console.log('transcripts route request', {
+    url: request.url,
+    method: request.method,
+    headers: Object.fromEntries(request.headers),
+    xWorkosMiddleware: request.headers.get('x-workos-middleware'),
+    xMiddlewareSubrequest: request.headers.get('x-middleware-subrequest'),
+  });
   try {
     const session = await withAuth();
+    console.log('transcripts route session', {
+      user: session.user,
+      sessionId: session.sessionId,
+      organizationId: session.organizationId,
+      role: session.role,
+      roles: session.roles,
+      permissions: session.permissions,
+      entitlements: session.entitlements,
+      featureFlags: session.featureFlags,
+      impersonator: session.impersonator,
+    });
 
     const { user } = session;
 
