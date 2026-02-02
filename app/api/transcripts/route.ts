@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const { user } = session;
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Parse pagination parameters
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Database configuration missing' },
         { status: 500 },
       );
@@ -82,13 +82,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Database error:', error);
-      return NextResponse.json(
+      return Response.json(
         { error: 'Failed to fetch transcripts' },
         { status: 500 },
       );
     }
 
-    return NextResponse.json({
+    return Response.json({
       data: data || [],
       pagination: {
         page,
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('API error:', error);
-    return NextResponse.json(
+    return Response.json(
       { error: 'Internal server error' },
       { status: 500 },
     );

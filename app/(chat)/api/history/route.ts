@@ -1,8 +1,7 @@
 import { withAuth } from '@workos-inc/authkit-nextjs';
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { getChatsByUserId, getDatabaseUserFromWorkOS } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
-import { toNextResponse } from '@/lib/server/next-response';
 
 export async function GET(request: NextRequest) {
   console.log('history route request', {
@@ -19,12 +18,10 @@ export async function GET(request: NextRequest) {
   const endingBefore = searchParams.get('ending_before');
 
   if (startingAfter && endingBefore) {
-    return toNextResponse(
-      new ChatSDKError(
-        'bad_request:api',
-        'Only one of starting_after or ending_before can be provided.',
-      ).toResponse(),
-    );
+    return new ChatSDKError(
+      'bad_request:api',
+      'Only one of starting_after or ending_before can be provided.',
+    ).toResponse();
   }
 
   const session = await withAuth();
@@ -41,9 +38,7 @@ export async function GET(request: NextRequest) {
   });
 
   if (!session?.user) {
-    return toNextResponse(
-      new ChatSDKError('unauthorized:chat').toResponse(),
-    );
+    return new ChatSDKError('unauthorized:chat').toResponse();
   }
 
   try {
@@ -56,9 +51,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!databaseUser) {
-      return toNextResponse(
-        new ChatSDKError('not_found:history', 'User not found').toResponse(),
-      );
+      return new ChatSDKError(
+        'not_found:history',
+        'User not found',
+      ).toResponse();
     }
 
     const chats = await getChatsByUserId({
@@ -68,11 +64,12 @@ export async function GET(request: NextRequest) {
       endingBefore,
     });
 
-    return NextResponse.json(chats);
+    return Response.json(chats);
   } catch (error) {
     console.error('Error in history API:', error);
-    return toNextResponse(
-      new ChatSDKError('bad_request:database', 'Database error').toResponse(),
-    );
+    return new ChatSDKError(
+      'bad_request:database',
+      'Database error',
+    ).toResponse();
   }
 }

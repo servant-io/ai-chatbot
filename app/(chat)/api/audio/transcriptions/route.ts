@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import {
   getDatabaseUserFromWorkOS,
@@ -27,7 +26,7 @@ export async function GET(request: Request) {
   });
 
   if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -41,7 +40,7 @@ export async function GET(request: Request) {
   });
 
   if (!dbUser) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    return Response.json({ error: 'User not found' }, { status: 404 });
   }
 
   const rows = await listAudioTranscriptionsByUserId({
@@ -49,5 +48,5 @@ export async function GET(request: Request) {
     limit,
   });
 
-  return NextResponse.json(rows);
+  return Response.json(rows);
 }
