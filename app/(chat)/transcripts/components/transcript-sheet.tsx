@@ -14,43 +14,75 @@ import {
 import { Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { useCopyToClipboard } from 'usehooks-ts';
 import { toast } from 'sonner';
-
-interface Transcript {
-  id: number;
-  recording_start: string;
-  summary: string;
-  projects: string[];
-  clients: string[];
-  meeting_type: 'internal' | 'external' | 'unknown';
-  extracted_participants: string[];
-  verified_participant_emails?: string[];
-}
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { Transcript } from './list/use-transcripts';
 
 interface TranscriptSheetProps {
   transcript: Transcript | null;
   isOpen: boolean;
   onClose: () => void;
-  isMember?: boolean;
+  canShareTranscripts: boolean;
 }
 
 export function TranscriptSheet({
   transcript,
   isOpen,
   onClose,
-  isMember = false,
+  canShareTranscripts,
 }: TranscriptSheetProps) {
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [_, copyToClipboard] = useCopyToClipboard();
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  const [isSharing, setIsSharing] = useState(false);
 
   // Use SWR to fetch transcript content when sheet is open and transcript exists (but not for members)
-  const shouldFetch = isOpen && transcript?.id && !isMember;
+  const canViewFullContent = transcript?.can_view_full_content === true;
+  const shouldFetch = isOpen && transcript?.id && canViewFullContent;
   const { data, error, isLoading } = useSWR(
     shouldFetch ? `/api/transcripts/${transcript.id}` : null,
     fetcher,
   );
 
   const transcriptContent = data?.content || null;
+
+  const { data: teamsResponse, mutate: mutateTeams } = useSWR<{
+    data: Array<{ id: string; name: string }>;
+  }>(canShareTranscripts ? '/api/teams' : null, fetcher);
+
+  const teams = teamsResponse?.data ?? [];
+
+  const shareToTeam = async () => {
+    if (!transcript || !selectedTeamId || isSharing) return;
+
+    setIsSharing(true);
+    try {
+      const res = await fetch(`/api/teams/${selectedTeamId}/shares`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcriptId: transcript.id }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to share transcript');
+      }
+
+      setSelectedTeamId('');
+      toast.success('Shared transcript to team');
+    } catch (err) {
+      console.error('Error sharing transcript:', err);
+      toast.error('Failed to share transcript');
+    } finally {
+      setIsSharing(false);
+      await mutateTeams();
+    }
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -87,8 +119,34 @@ export function TranscriptSheet({
         <div className="mt-6 space-y-6">
           {/* Meeting Info */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
               <CardTitle>Meeting Information</CardTitle>
+              {canShareTranscripts && (
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedTeamId}
+                    onValueChange={setSelectedTeamId}
+                  >
+                    <SelectTrigger className="h-8 w-[220px]">
+                      <SelectValue placeholder="Share to team…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    onClick={shareToTeam}
+                    disabled={!selectedTeamId || isSharing}
+                  >
+                    Share
+                  </Button>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -152,11 +210,28 @@ export function TranscriptSheet({
                   </div>
                 </div>
               )}
+
+              {transcript?.shared_in_teams &&
+                transcript.shared_in_teams.length > 0 && (
+                  <div>
+                    <span className="font-medium">Shared in teams: </span>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {transcript.shared_in_teams.map((teamName) => (
+                        <span
+                          key={teamName}
+                          className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                        >
+                          {teamName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
             </CardContent>
           </Card>
 
           {/* Transcript Content - Only show for elevated roles */}
-          {!isMember && (
+          {canViewFullContent && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Full Transcript</CardTitle>
