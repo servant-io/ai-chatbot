@@ -2,7 +2,9 @@ import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import {
+  getDirectlySharedTranscriptIdsByUserEmail,
   getEnabledTeamTranscriptRulesByUserEmail,
+  getSharedTranscriptTeamsByUserEmail,
   shareTranscriptToTeam,
 } from '@/lib/db/queries';
 
@@ -103,9 +105,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const canViewFullContent = session.role !== 'member';
+    const canShareTranscripts = session.role !== 'member';
 
-    if (canViewFullContent && user.email && data && data.length > 0) {
+    if (canShareTranscripts && user.email && data && data.length > 0) {
       const rules = await getEnabledTeamTranscriptRulesByUserEmail({
         userEmail: user.email,
       });
@@ -130,9 +132,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const sharedTeamMap = new Map<number, Array<string>>();
+    let sharedTranscriptIds = new Set<number>();
+
+    if (user.email) {
+      const [teamShares, directShares] = await Promise.all([
+        getSharedTranscriptTeamsByUserEmail({ userEmail: user.email }),
+        getDirectlySharedTranscriptIdsByUserEmail({ userEmail: user.email }),
+      ]);
+
+      for (const share of teamShares) {
+        const names = sharedTeamMap.get(share.transcriptId);
+        if (names) {
+          names.push(share.teamName);
+        } else {
+          sharedTeamMap.set(share.transcriptId, [share.teamName]);
+        }
+      }
+
+      const teamShareIds = teamShares.map((share) => share.transcriptId);
+      sharedTranscriptIds = new Set([...teamShareIds, ...directShares]);
+    }
+
     const items = (data ?? []).map((row) => ({
       ...row,
-      can_view_full_content: canViewFullContent,
+      can_view_full_content:
+        canShareTranscripts || sharedTranscriptIds.has(row.id),
+      shared_in_teams: sharedTeamMap.get(row.id) ?? [],
     }));
 
     return Response.json({
