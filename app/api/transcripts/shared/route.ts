@@ -2,7 +2,10 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
-import { getSharedTranscriptTeamsByUserEmail } from '@/lib/db/queries';
+import {
+  getDirectlySharedTranscriptIdsByUserEmail,
+  getSharedTranscriptTeamsByUserEmail,
+} from '@/lib/db/queries';
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,12 +21,13 @@ export async function GET(request: NextRequest) {
     const limit = Number.parseInt(searchParams.get('limit') || '20', 10);
     const offset = (page - 1) * limit;
 
-    const shareRows = await getSharedTranscriptTeamsByUserEmail({
-      userEmail: email,
-    });
+    const [teamShares, directShares] = await Promise.all([
+      getSharedTranscriptTeamsByUserEmail({ userEmail: email }),
+      getDirectlySharedTranscriptIdsByUserEmail({ userEmail: email }),
+    ]);
 
     const sharedByTranscriptId = new Map<number, Array<string>>();
-    for (const row of shareRows) {
+    for (const row of teamShares) {
       const teams = sharedByTranscriptId.get(row.transcriptId);
       if (teams) {
         teams.push(row.teamName);
@@ -32,7 +36,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const sharedTranscriptIds = Array.from(sharedByTranscriptId.keys());
+    const teamShareIds = teamShares.map((share) => share.transcriptId);
+    const sharedTranscriptIds = Array.from(
+      new Set([...teamShareIds, ...directShares]),
+    );
     const total = sharedTranscriptIds.length;
 
     if (sharedTranscriptIds.length === 0) {

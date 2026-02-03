@@ -1317,6 +1317,26 @@ export async function getSharedTranscriptTeamsByUserEmail({
   }
 }
 
+export async function getDirectlySharedTranscriptIdsByUserEmail({
+  userEmail,
+}: {
+  userEmail: string;
+}): Promise<number[]> {
+  try {
+    const rows = await db
+      .select({ transcriptId: transcriptShare.transcriptId })
+      .from(transcriptShare)
+      .where(eq(transcriptShare.userEmail, userEmail));
+
+    return rows.map((row) => row.transcriptId);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to list direct transcript shares',
+    );
+  }
+}
+
 export async function isTranscriptSharedWithUserEmail({
   transcriptId,
   userEmail,
