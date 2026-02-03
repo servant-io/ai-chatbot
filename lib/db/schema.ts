@@ -11,6 +11,7 @@ import {
   foreignKey,
   boolean,
   bigint,
+  integer,
   index,
 } from 'drizzle-orm/pg-core';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider';
@@ -22,6 +23,103 @@ export const user = pgTable('User', {
 });
 
 export type User = InferSelectModel<typeof user>;
+
+export const team = pgTable(
+  'Team',
+  {
+    id: uuid('id').primaryKey().notNull().defaultRandom(),
+    name: text('name').notNull(),
+    createdByEmail: text('createdByEmail').notNull(),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+  },
+  (table) => ({
+    createdByEmailIdx: index('Team_createdByEmail_idx').on(
+      table.createdByEmail,
+    ),
+  }),
+);
+
+export type Team = InferSelectModel<typeof team>;
+
+export const teamMember = pgTable(
+  'TeamMember',
+  {
+    teamId: uuid('teamId')
+      .notNull()
+      .references(() => team.id, { onDelete: 'cascade' }),
+    userEmail: varchar('userEmail', { length: 256 }).notNull(),
+    role: varchar('role', { enum: ['owner', 'member'] }).notNull(),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    createdByEmail: text('createdByEmail').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.userEmail] }),
+    userEmailIdx: index('TeamMember_userEmail_idx').on(table.userEmail),
+    teamIdIdx: index('TeamMember_teamId_idx').on(table.teamId),
+  }),
+);
+
+export type TeamMember = InferSelectModel<typeof teamMember>;
+
+export const teamTranscriptShare = pgTable(
+  'TeamTranscriptShare',
+  {
+    teamId: uuid('teamId')
+      .notNull()
+      .references(() => team.id, { onDelete: 'cascade' }),
+    transcriptId: integer('transcriptId').notNull(),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    createdByEmail: text('createdByEmail').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.transcriptId] }),
+    teamIdIdx: index('TeamTranscriptShare_teamId_idx').on(table.teamId),
+    transcriptIdIdx: index('TeamTranscriptShare_transcriptId_idx').on(
+      table.transcriptId,
+    ),
+  }),
+);
+
+export type TeamTranscriptShare = InferSelectModel<typeof teamTranscriptShare>;
+
+export const transcriptShare = pgTable(
+  'TranscriptShare',
+  {
+    transcriptId: integer('transcriptId').notNull(),
+    userEmail: varchar('userEmail', { length: 256 }).notNull(),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    createdByEmail: text('createdByEmail').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.transcriptId, table.userEmail] }),
+    userEmailIdx: index('TranscriptShare_userEmail_idx').on(table.userEmail),
+    transcriptIdIdx: index('TranscriptShare_transcriptId_idx').on(
+      table.transcriptId,
+    ),
+  }),
+);
+
+export type TranscriptShare = InferSelectModel<typeof transcriptShare>;
+
+export const teamTranscriptRule = pgTable(
+  'TeamTranscriptRule',
+  {
+    id: uuid('id').primaryKey().notNull().defaultRandom(),
+    teamId: uuid('teamId')
+      .notNull()
+      .references(() => team.id, { onDelete: 'cascade' }),
+    type: varchar('type', { enum: ['summary_topic_exact'] }).notNull(),
+    value: text('value').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    createdByEmail: text('createdByEmail').notNull(),
+  },
+  (table) => ({
+    teamIdIdx: index('TeamTranscriptRule_teamId_idx').on(table.teamId),
+  }),
+);
+
+export type TeamTranscriptRule = InferSelectModel<typeof teamTranscriptRule>;
 
 export const googleCredentials = pgTable('GoogleCredentials', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),

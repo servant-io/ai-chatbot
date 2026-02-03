@@ -11,7 +11,7 @@ import BlurEffect from 'react-progressive-blur';
 
 interface TranscriptChatInputProps {
   selectedTranscripts: Transcript[];
-  isMember: boolean;
+  canViewFullContent: boolean;
 }
 
 const extractTopic = (summary: string) => {
@@ -38,7 +38,7 @@ const extractTopic = (summary: string) => {
 
 export function TranscriptChatInput({
   selectedTranscripts,
-  isMember,
+  canViewFullContent,
 }: TranscriptChatInputProps) {
   const router = useRouter();
   const [chatQuery, setChatQuery] = useState('');
@@ -54,9 +54,8 @@ export function TranscriptChatInput({
 
       let transcriptContext: string;
 
-      if (isMember) {
-        // For members: Only use summaries, no full transcript content
-        console.log('🚫 Member using chat - providing summaries only');
+      if (!canViewFullContent) {
+        // Summaries-only context (e.g. member role without explicit share)
         transcriptContext = selectedTranscripts
           .map((transcript) => {
             const topic = extractTopic(transcript.summary);
@@ -75,8 +74,7 @@ export function TranscriptChatInput({
           })
           .join('\n\n---\n\n');
       } else {
-        // For elevated roles: Fetch full transcript content
-        console.log('✅ Elevated role using chat - providing full transcripts');
+        // Full transcript context (shared transcripts and elevated roles)
         const transcriptContents = await Promise.all(
           selectedTranscripts.map(async (transcript) => {
             try {

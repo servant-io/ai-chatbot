@@ -9,6 +9,11 @@ import { z } from 'zod/v4';
 
 import { verifyToken } from '@/lib/mcp/with-authkit';
 import { createDownloadToken } from '@/lib/mcp/download-token';
+import {
+  getDirectlySharedTranscriptIdsByUserEmail,
+  getSharedTranscriptTeamsByUserEmail,
+  isTranscriptSharedWithUserEmail,
+} from '@/lib/db/queries';
 
 const EMPTY_OBJECT_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -33,6 +38,18 @@ const getUserId = (authInfo?: AuthInfo): string | undefined => {
 
 const isTranscriptDownloadRestrictedRole = (role: string | null): boolean =>
   role === 'member';
+
+const getSharedTranscriptIdsForUser = async (
+  email: string,
+): Promise<number[]> => {
+  const [teamShares, directShares] = await Promise.all([
+    getSharedTranscriptTeamsByUserEmail({ userEmail: email }),
+    getDirectlySharedTranscriptIdsByUserEmail({ userEmail: email }),
+  ]);
+
+  const teamShareIds = teamShares.map((share) => share.transcriptId);
+  return Array.from(new Set([...teamShareIds, ...directShares]));
+};
 
 const handler = createMcpHandler(
   (server) => {
@@ -93,8 +110,7 @@ const handler = createMcpHandler(
             content: [
               {
                 type: 'text',
-                text:
-                  'Supabase credentials not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.',
+                text: 'Supabase credentials not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.',
               },
             ],
             isError: true,
@@ -107,58 +123,103 @@ const handler = createMcpHandler(
         const isFuzzy = Boolean(fuzzy);
         const searchScope = scope || 'summary';
 
-        let query = supabase
-          .from('transcripts')
-          .select(
-            'id, recording_start, summary, projects, clients, meeting_type, extracted_participants',
-          )
-          .order('recording_start', { ascending: false })
-          .limit(lim);
+        const buildQuery = () =>
+          supabase
+            .from('transcripts')
+            .select(
+              'id, recording_start, summary, projects, clients, meeting_type, extracted_participants',
+            )
+            .order('recording_start', { ascending: false })
+            .limit(lim);
 
-        // Apply participant filter based on role
-        // admin: no filter (sees all)
-        // org-fte, member: filter by participant
-        if (role !== 'admin') {
-          query = query.contains('verified_participant_emails', [email]);
-        }
+        const applyFilters = (
+          query: ReturnType<typeof buildQuery>,
+        ): ReturnType<typeof buildQuery> => {
+          let filteredQuery = query;
 
-        if (start_date) query = query.gte('recording_start', start_date);
-        if (end_date) {
-          const endDate = new Date(end_date);
-          endDate.setDate(endDate.getDate() + 1);
-          const nextDay = endDate.toISOString().split('T')[0];
-          query = query.lt('recording_start', nextDay);
-        }
-        if (meeting_type) query = query.eq('meeting_type', meeting_type);
-
-        if (searchScope === 'summary') {
-          if (isFuzzy) {
-            query = query.ilike('summary', `%${kw.toLowerCase()}%`);
-          } else {
-            query = query.ilike('summary', `%${kw}%`);
+          if (start_date)
+            filteredQuery = filteredQuery.gte('recording_start', start_date);
+          if (end_date) {
+            const endDate = new Date(end_date);
+            endDate.setDate(endDate.getDate() + 1);
+            const nextDay = endDate.toISOString().split('T')[0];
+            filteredQuery = filteredQuery.lt('recording_start', nextDay);
           }
-        } else if (searchScope === 'content') {
-          if (isFuzzy) {
-            query = query.ilike(
-              'transcript_content->>cleaned',
-              `%${kw.toLowerCase()}%`,
-            );
+          if (meeting_type)
+            filteredQuery = filteredQuery.eq('meeting_type', meeting_type);
+
+          if (searchScope === 'summary') {
+            filteredQuery = isFuzzy
+              ? filteredQuery.ilike('summary', `%${kw.toLowerCase()}%`)
+              : filteredQuery.ilike('summary', `%${kw}%`);
+          } else if (searchScope === 'content') {
+            filteredQuery = isFuzzy
+              ? filteredQuery.ilike(
+                  'transcript_content->>cleaned',
+                  `%${kw.toLowerCase()}%`,
+                )
+              : filteredQuery.ilike('transcript_content->>cleaned', `%${kw}%`);
           } else {
-            query = query.ilike('transcript_content->>cleaned', `%${kw}%`);
+            filteredQuery = isFuzzy
+              ? filteredQuery.or(
+                  `summary.ilike.%${kw.toLowerCase()}%,transcript_content->>cleaned.ilike.%${kw.toLowerCase()}%`,
+                )
+              : filteredQuery.or(
+                  `summary.ilike.%${kw}%,transcript_content->>cleaned.ilike.%${kw}%`,
+                );
           }
+
+          return filteredQuery;
+        };
+
+        let data: Array<Record<string, unknown>> | null = null;
+        let error: { message: string } | null = null;
+
+        if (role === 'admin') {
+          const query = applyFilters(buildQuery());
+          const response = await query;
+          data = response.data;
+          error = response.error;
         } else {
-          if (isFuzzy) {
-            query = query.or(
-              `summary.ilike.%${kw.toLowerCase()}%,transcript_content->>cleaned.ilike.%${kw.toLowerCase()}%`,
-            );
+          const sharedIds = await getSharedTranscriptIdsForUser(email);
+          const participantQuery = applyFilters(buildQuery()).contains(
+            'verified_participant_emails',
+            [email],
+          );
+
+          if (sharedIds.length === 0) {
+            const response = await participantQuery;
+            data = response.data;
+            error = response.error;
           } else {
-            query = query.or(
-              `summary.ilike.%${kw}%,transcript_content->>cleaned.ilike.%${kw}%`,
-            );
+            const sharedQuery = applyFilters(buildQuery()).in('id', sharedIds);
+
+            const [participantResponse, sharedResponse] = await Promise.all([
+              participantQuery,
+              sharedQuery,
+            ]);
+
+            if (participantResponse.error || sharedResponse.error) {
+              error = participantResponse.error || sharedResponse.error;
+            } else {
+              const merged = new Map<number, Record<string, unknown>>();
+              for (const row of participantResponse.data ?? []) {
+                merged.set(row.id as number, row);
+              }
+              for (const row of sharedResponse.data ?? []) {
+                merged.set(row.id as number, row);
+              }
+
+              data = Array.from(merged.values())
+                .sort((a, b) => {
+                  const aDate = new Date(a.recording_start as string).getTime();
+                  const bDate = new Date(b.recording_start as string).getTime();
+                  return bDate - aDate;
+                })
+                .slice(0, lim);
+            }
           }
         }
-
-        const { data, error } = await query;
 
         if (error) {
           return {
@@ -263,8 +324,7 @@ const handler = createMcpHandler(
             content: [
               {
                 type: 'text',
-                text:
-                  'Supabase credentials not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.',
+                text: 'Supabase credentials not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.',
               },
             ],
             isError: true,
@@ -274,37 +334,90 @@ const handler = createMcpHandler(
         const supabase = createClient(supabaseUrl, supabaseKey);
         const lim = Number(limit);
 
-        let query = supabase
-          .from('transcripts')
-          .select(
-            'id, recording_start, summary, projects, clients, meeting_type, extracted_participants, host_email, verified_participant_emails',
-          )
-          .order('recording_start', { ascending: false })
-          .limit(lim);
+        const buildQuery = () =>
+          supabase
+            .from('transcripts')
+            .select(
+              'id, recording_start, summary, projects, clients, meeting_type, extracted_participants, host_email, verified_participant_emails',
+            )
+            .order('recording_start', { ascending: false })
+            .limit(lim);
 
-        // Apply participant filter based on role
-        // admin: no filter (sees all)
-        // org-fte, member: filter by participant
-        if (role !== 'admin') {
-          query = query.contains('verified_participant_emails', [email]);
+        const applyFilters = (
+          query: ReturnType<typeof buildQuery>,
+        ): ReturnType<typeof buildQuery> => {
+          let filteredQuery = query;
+
+          if (start_date)
+            filteredQuery = filteredQuery.gte('recording_start', start_date);
+          if (end_date) {
+            const endDate = new Date(end_date);
+            endDate.setDate(endDate.getDate() + 1);
+            const nextDay = endDate.toISOString().split('T')[0];
+            filteredQuery = filteredQuery.lt('recording_start', nextDay);
+          }
+          if (meeting_type)
+            filteredQuery = filteredQuery.eq('meeting_type', meeting_type);
+          if (host_email)
+            filteredQuery = filteredQuery.eq('host_email', host_email);
+          if (verified_participant_email) {
+            filteredQuery = filteredQuery.contains(
+              'verified_participant_emails',
+              [verified_participant_email],
+            );
+          }
+
+          return filteredQuery;
+        };
+
+        let data: Array<Record<string, unknown>> | null = null;
+        let error: { message: string } | null = null;
+
+        if (role === 'admin') {
+          const query = applyFilters(buildQuery());
+          const response = await query;
+          data = response.data;
+          error = response.error;
+        } else {
+          const sharedIds = await getSharedTranscriptIdsForUser(email);
+          const participantQuery = applyFilters(buildQuery()).contains(
+            'verified_participant_emails',
+            [email],
+          );
+
+          if (sharedIds.length === 0) {
+            const response = await participantQuery;
+            data = response.data;
+            error = response.error;
+          } else {
+            const sharedQuery = applyFilters(buildQuery()).in('id', sharedIds);
+
+            const [participantResponse, sharedResponse] = await Promise.all([
+              participantQuery,
+              sharedQuery,
+            ]);
+
+            if (participantResponse.error || sharedResponse.error) {
+              error = participantResponse.error || sharedResponse.error;
+            } else {
+              const merged = new Map<number, Record<string, unknown>>();
+              for (const row of participantResponse.data ?? []) {
+                merged.set(row.id as number, row);
+              }
+              for (const row of sharedResponse.data ?? []) {
+                merged.set(row.id as number, row);
+              }
+
+              data = Array.from(merged.values())
+                .sort((a, b) => {
+                  const aDate = new Date(a.recording_start as string).getTime();
+                  const bDate = new Date(b.recording_start as string).getTime();
+                  return bDate - aDate;
+                })
+                .slice(0, lim);
+            }
+          }
         }
-
-        if (start_date) query = query.gte('recording_start', start_date);
-        if (end_date) {
-          const endDate = new Date(end_date);
-          endDate.setDate(endDate.getDate() + 1);
-          const nextDay = endDate.toISOString().split('T')[0];
-          query = query.lt('recording_start', nextDay);
-        }
-        if (meeting_type) query = query.eq('meeting_type', meeting_type);
-
-        if (host_email) query = query.eq('host_email', host_email);
-        if (verified_participant_email)
-          query = query.contains('verified_participant_emails', [
-            verified_participant_email,
-          ]);
-
-        const { data, error } = await query;
 
         if (error) {
           return {
@@ -365,13 +478,18 @@ const handler = createMcpHandler(
           };
         }
 
-        // Members cannot download transcripts
-        if (isTranscriptDownloadRestrictedRole(role)) {
+        const isShared = await isTranscriptSharedWithUserEmail({
+          transcriptId: transcript_id,
+          userEmail: email,
+        });
+
+        // Members can download only if transcript is shared
+        if (isTranscriptDownloadRestrictedRole(role) && !isShared) {
           return {
             content: [
               {
                 type: 'text',
-                text: 'Access denied. Members cannot download transcript content.',
+                text: 'Access denied. Members can only download shared transcripts.',
               },
             ],
             isError: true,
@@ -402,7 +520,7 @@ const handler = createMcpHandler(
           .eq('id', transcript_id);
 
         // Apply participant filter for non-admin users
-        if (role !== 'admin') {
+        if (role !== 'admin' && !isShared) {
           query = query.contains('verified_participant_emails', [email]);
         }
 
@@ -464,57 +582,60 @@ const handler = createMcpHandler(
 
     registeredTools.set('get_transcript_download_url', transcriptDownloadTool);
 
-    server.server.setRequestHandler(ListToolsRequestSchema, (_request, extra) => {
-      const role = getUserRole(extra?.authInfo);
-      const hideDownloadTool = isTranscriptDownloadRestrictedRole(role);
+    server.server.setRequestHandler(
+      ListToolsRequestSchema,
+      (_request, extra) => {
+        const role = getUserRole(extra?.authInfo);
+        const hideDownloadTool = isTranscriptDownloadRestrictedRole(role);
 
-      const tools = Array.from(registeredTools.entries())
-        .filter(
-          ([name, tool]) =>
-            tool.enabled &&
-            (name !== 'get_transcript_download_url' || !hideDownloadTool),
-        )
-        .map(([name, tool]) => {
-          const inputSchema = normalizeObjectSchema(tool.inputSchema);
-          const toolDefinition: {
-            name: string;
-            title?: string;
-            description?: string;
-            inputSchema: Record<string, unknown>;
-            annotations?: RegisteredTool['annotations'];
-            execution?: RegisteredTool['execution'];
-            _meta?: RegisteredTool['_meta'];
-            outputSchema?: Record<string, unknown>;
-          } = {
-            name,
-            title: tool.title,
-            description: tool.description,
-            inputSchema: inputSchema
-              ? toJsonSchemaCompat(inputSchema, {
+        const tools = Array.from(registeredTools.entries())
+          .filter(
+            ([name, tool]) =>
+              tool.enabled &&
+              (name !== 'get_transcript_download_url' || !hideDownloadTool),
+          )
+          .map(([name, tool]) => {
+            const inputSchema = normalizeObjectSchema(tool.inputSchema);
+            const toolDefinition: {
+              name: string;
+              title?: string;
+              description?: string;
+              inputSchema: Record<string, unknown>;
+              annotations?: RegisteredTool['annotations'];
+              execution?: RegisteredTool['execution'];
+              _meta?: RegisteredTool['_meta'];
+              outputSchema?: Record<string, unknown>;
+            } = {
+              name,
+              title: tool.title,
+              description: tool.description,
+              inputSchema: inputSchema
+                ? toJsonSchemaCompat(inputSchema, {
+                    strictUnions: true,
+                    pipeStrategy: 'input',
+                  })
+                : EMPTY_OBJECT_JSON_SCHEMA,
+              annotations: tool.annotations,
+              execution: tool.execution,
+              _meta: tool._meta,
+            };
+
+            if (tool.outputSchema) {
+              const outputSchema = normalizeObjectSchema(tool.outputSchema);
+              if (outputSchema) {
+                toolDefinition.outputSchema = toJsonSchemaCompat(outputSchema, {
                   strictUnions: true,
-                  pipeStrategy: 'input',
-                })
-              : EMPTY_OBJECT_JSON_SCHEMA,
-            annotations: tool.annotations,
-            execution: tool.execution,
-            _meta: tool._meta,
-          };
-
-          if (tool.outputSchema) {
-            const outputSchema = normalizeObjectSchema(tool.outputSchema);
-            if (outputSchema) {
-              toolDefinition.outputSchema = toJsonSchemaCompat(outputSchema, {
-                strictUnions: true,
-                pipeStrategy: 'output',
-              });
+                  pipeStrategy: 'output',
+                });
+              }
             }
-          }
 
-          return toolDefinition;
-        });
+            return toolDefinition;
+          });
 
-      return { tools };
-    });
+        return { tools };
+      },
+    );
   },
   {},
   {
