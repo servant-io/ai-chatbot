@@ -11,6 +11,8 @@ export interface Transcript {
   meeting_type: 'internal' | 'external' | 'unknown';
   extracted_participants: string[];
   verified_participant_emails?: string[];
+  can_view_full_content?: boolean;
+  shared_in_teams?: string[];
 }
 
 interface PaginationInfo {
@@ -23,7 +25,9 @@ interface PaginationInfo {
 }
 
 export function useTranscripts() {
-  const [searchTerm, setSearchTerm] = useState('');
+  // Default scope is "mine" (/api/transcripts). Use "shared" for team-shared items.
+  const [scope, setScopeState] = useState<'mine' | 'shared'>('mine');
+  const [searchTerm, setSearchTermState] = useState('');
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     limit: 20,
@@ -33,17 +37,25 @@ export function useTranscripts() {
     hasPrev: false,
   });
 
-  useEffect(() => {
+  const setScope = (nextScope: 'mine' | 'shared') => {
+    setScopeState(nextScope);
     setPagination((prev) => ({ ...prev, page: 1 }));
-  }, [searchTerm]);
+  };
+
+  const setSearchTerm = (nextTerm: string) => {
+    setSearchTermState(nextTerm);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
 
   const cacheKey = useMemo(() => {
+    const basePath =
+      scope === 'shared' ? '/api/transcripts/shared' : '/api/transcripts';
     const params = new URLSearchParams({
       page: pagination.page.toString(),
       limit: pagination.limit.toString(),
     });
-    return `/api/transcripts?${params}`;
-  }, [pagination.page, pagination.limit]);
+    return `${basePath}?${params}`;
+  }, [pagination.page, pagination.limit, scope]);
 
   const { data, error, isLoading } = useSWR(cacheKey, fetcher);
 
@@ -86,6 +98,8 @@ export function useTranscripts() {
   };
 
   return {
+    scope,
+    setScope,
     searchTerm,
     setSearchTerm,
     pagination,

@@ -86,6 +86,12 @@ export function TranscriptCard({
               >
                 {transcript.meeting_type}
               </span>
+              {transcript.shared_in_teams &&
+                transcript.shared_in_teams.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                    Shared
+                  </span>
+                )}
             </div>
           </div>
 
