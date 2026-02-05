@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 
@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers),
       isResponseInstance: response instanceof Response,
+      isNextResponseInstance: response instanceof NextResponse,
       responseConstructor: response.constructor?.name,
       responseProto: Object.getPrototypeOf(response)?.constructor?.name,
       responseTag: Object.prototype.toString.call(response),
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     if (!user) {
       const payload = { error: 'Unauthorized' };
-      const response = Response.json(payload, { status: 401 });
+      const response = NextResponse.json(payload, { status: 401 });
       logResponse('unauthorized', response, payload);
       return response;
     }
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     if (!supabaseUrl || !supabaseKey) {
       const payload = { error: 'Database configuration missing' };
-      const response = Response.json(payload, { status: 500 });
+      const response = NextResponse.json(payload, { status: 500 });
       logResponse('missing-db-config', response, payload);
       return response;
     }
@@ -116,7 +117,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Database error:', error);
       const payload = { error: 'Failed to fetch transcripts' };
-      const response = Response.json(payload, { status: 500 });
+      const response = NextResponse.json(payload, { status: 500 });
       logResponse('query-error', response, payload);
       return response;
     }
@@ -132,14 +133,14 @@ export async function GET(request: NextRequest) {
         hasPrev: page > 1,
       },
     };
-    const response = Response.json(payload);
+    const response = NextResponse.json(payload);
     logResponse('success', response, payload);
     return response;
   } catch (error) {
     console.error('API error:', error);
     console.log('transcripts route session raw on error', session);
     const payload = { error: 'Internal server error' };
-    const response = Response.json(payload, { status: 500 });
+    const response = NextResponse.json(payload, { status: 500 });
     logResponse('catch', response, payload);
     return response;
   }
