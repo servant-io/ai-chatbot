@@ -10,8 +10,34 @@ export async function GET(request: NextRequest) {
     xWorkosMiddleware: request.headers.get('x-workos-middleware'),
     xMiddlewareSubrequest: request.headers.get('x-middleware-subrequest'),
   });
+  let session:
+    | Awaited<ReturnType<typeof withAuth>>
+    | undefined;
+  const logResponse = (
+    label: string,
+    response: Response,
+    payload?: unknown,
+  ) => {
+    console.log('transcripts route response', {
+      label,
+      payload,
+      response,
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers),
+      isResponseInstance: response instanceof Response,
+      responseConstructor: response.constructor?.name,
+      responseProto: Object.getPrototypeOf(response)?.constructor?.name,
+      responseTag: Object.prototype.toString.call(response),
+      responseHasBody: response.body !== null,
+      responseJsonType: typeof Response.json,
+      responseName: Response.name,
+    });
+  };
   try {
-    const session = await withAuth();
+    console.log('transcripts route before withAuth');
+    session = await withAuth();
+    console.log('transcripts route session raw', session);
     console.log('transcripts route session', {
       user: session.user,
       sessionId: session.sessionId,
@@ -27,7 +53,10 @@ export async function GET(request: NextRequest) {
     const { user } = session;
 
     if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      const payload = { error: 'Unauthorized' };
+      const response = Response.json(payload, { status: 401 });
+      logResponse('unauthorized', response, payload);
+      return response;
     }
 
     // Parse pagination parameters
@@ -40,10 +69,10 @@ export async function GET(request: NextRequest) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      return Response.json(
-        { error: 'Database configuration missing' },
-        { status: 500 },
-      );
+      const payload = { error: 'Database configuration missing' };
+      const response = Response.json(payload, { status: 500 });
+      logResponse('missing-db-config', response, payload);
+      return response;
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -74,6 +103,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { count, error: countError } = await countQuery;
+    console.log('transcripts route count result', {
+      count,
+      countError,
+    });
 
     // Get paginated results
     const { data, error } = await baseQuery
@@ -82,13 +115,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Database error:', error);
-      return Response.json(
-        { error: 'Failed to fetch transcripts' },
-        { status: 500 },
-      );
+      const payload = { error: 'Failed to fetch transcripts' };
+      const response = Response.json(payload, { status: 500 });
+      logResponse('query-error', response, payload);
+      return response;
     }
 
-    return Response.json({
+    const payload = {
       data: data || [],
       pagination: {
         page,
@@ -98,12 +131,16 @@ export async function GET(request: NextRequest) {
         hasNext: page < Math.ceil((count || 0) / limit),
         hasPrev: page > 1,
       },
-    });
+    };
+    const response = Response.json(payload);
+    logResponse('success', response, payload);
+    return response;
   } catch (error) {
     console.error('API error:', error);
-    return Response.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    console.log('transcripts route session raw on error', session);
+    const payload = { error: 'Internal server error' };
+    const response = Response.json(payload, { status: 500 });
+    logResponse('catch', response, payload);
+    return response;
   }
 }
