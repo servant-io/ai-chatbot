@@ -61,7 +61,7 @@
     "@vercel/functions": "^2.2.11",
     "@vercel/otel": "^1.13.0",
     "@vercel/postgres": "^0.10.0",
-    "@workos-inc/authkit-nextjs": "^2.12.2",
+    "@workos-inc/authkit-nextjs": "^2.13.0",
     "ai": "5.0.52",
     "axios": "^1.13.2",
     "bcrypt-ts": "^5.0.2",
