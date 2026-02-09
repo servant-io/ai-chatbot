@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyDownloadToken } from '@/lib/mcp/download-token';
 
@@ -24,7 +24,6 @@ export async function GET(
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers),
       isResponseInstance: response instanceof Response,
-      isNextResponseInstance: response instanceof NextResponse,
       responseConstructor: response.constructor?.name,
       responseTag: Object.prototype.toString.call(response),
       responseHasBody: response.body !== null,
@@ -51,7 +50,7 @@ export async function GET(
 
     if (Number.isNaN(transcriptId)) {
       const payload = { error: 'Invalid transcript ID' };
-      const response = NextResponse.json(payload, { status: 400 });
+      const response = Response.json(payload, { status: 400 });
       logResponse('invalid-transcript-id', response, payload);
       return response;
     }
@@ -59,7 +58,7 @@ export async function GET(
     const token = request.nextUrl.searchParams.get('token');
     if (!token) {
       const payload = { error: 'Missing download token' };
-      const response = NextResponse.json(payload, { status: 401 });
+      const response = Response.json(payload, { status: 401 });
       logResponse('missing-token', response, payload);
       return response;
     }
@@ -70,7 +69,7 @@ export async function GET(
     }
     if (!payload) {
       const errorPayload = { error: 'Invalid or expired download token' };
-      const response = NextResponse.json(errorPayload, { status: 401 });
+      const response = Response.json(errorPayload, { status: 401 });
       logResponse('invalid-token', response, errorPayload);
       return response;
     }
@@ -80,7 +79,7 @@ export async function GET(
       const errorPayload = {
         error: 'Token does not match requested transcript',
       };
-      const response = NextResponse.json(errorPayload, { status: 403 });
+      const response = Response.json(errorPayload, { status: 403 });
       logResponse('token-mismatch', response, errorPayload);
       return response;
     }
@@ -91,7 +90,7 @@ export async function GET(
         error:
           'Access denied. Members cannot download transcript content.',
       };
-      const response = NextResponse.json(errorPayload, { status: 403 });
+      const response = Response.json(errorPayload, { status: 403 });
       logResponse('role-blocked', response, errorPayload);
       return response;
     }
@@ -103,7 +102,7 @@ export async function GET(
       const errorPayload = {
         error: 'Supabase credentials not configured',
       };
-      const response = NextResponse.json(errorPayload, { status: 500 });
+      const response = Response.json(errorPayload, { status: 500 });
       logResponse('missing-supabase-config', response, errorPayload);
       return response;
     }
@@ -141,14 +140,14 @@ export async function GET(
         const errorPayload = {
           error: 'Transcript not found or access denied',
         };
-        const response = NextResponse.json(errorPayload, { status: 404 });
+        const response = Response.json(errorPayload, { status: 404 });
         logResponse('not-found-or-denied', response, errorPayload);
         return response;
       }
       const errorPayload = {
         error: `Database error: ${error.message}`,
       };
-      const response = NextResponse.json(errorPayload, { status: 500 });
+      const response = Response.json(errorPayload, { status: 500 });
       logResponse('db-error', response, errorPayload);
       return response;
     }
@@ -157,7 +156,7 @@ export async function GET(
       const errorPayload = {
         error: 'Transcript not found or access denied',
       };
-      const response = NextResponse.json(errorPayload, { status: 404 });
+      const response = Response.json(errorPayload, { status: 404 });
       logResponse('no-data', response, errorPayload);
       return response;
     }
@@ -207,7 +206,7 @@ ${data.summary || 'No summary available'}
 ${transcriptContent}
 `;
 
-    const response = new NextResponse(markdown, {
+    const response = new Response(markdown, {
       status: 200,
       headers: {
         'Content-Type': 'text/markdown; charset=utf-8',
@@ -219,7 +218,7 @@ ${transcriptContent}
   } catch (err) {
     console.error('Download route error:', err);
     const payload = { error: 'Internal server error' };
-    const response = NextResponse.json(payload, { status: 500 });
+    const response = Response.json(payload, { status: 500 });
     logResponse('catch', response, payload);
     return response;
   }
