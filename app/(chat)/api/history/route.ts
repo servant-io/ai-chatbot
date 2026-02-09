@@ -3,11 +3,30 @@ import type { NextRequest } from 'next/server';
 import { getChatsByUserId, getDatabaseUserFromWorkOS } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
+export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
+  const debug = process.env.HISTORY_DEBUG === '1';
+  const logResponse = (label: string, response: Response) => {
+    if (!debug) {
+      return;
+    }
+
+    console.log('history route response', {
+      label,
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers),
+      isResponseInstance: response instanceof Response,
+      responseConstructor: response.constructor?.name,
+      responseTag: Object.prototype.toString.call(response),
+      responseHasBody: response.body !== null,
+    });
+  };
+
   console.log('history route request', {
     url: request.url,
     method: request.method,
-    headers: Object.fromEntries(request.headers),
     xWorkosMiddleware: request.headers.get('x-workos-middleware'),
     xMiddlewareSubrequest: request.headers.get('x-middleware-subrequest'),
   });
@@ -18,10 +37,12 @@ export async function GET(request: NextRequest) {
   const endingBefore = searchParams.get('ending_before');
 
   if (startingAfter && endingBefore) {
-    return new ChatSDKError(
+    const response = new ChatSDKError(
       'bad_request:api',
       'Only one of starting_after or ending_before can be provided.',
     ).toResponse();
+    logResponse('bad-request-pagination', response);
+    return response;
   }
 
   const session = await withAuth();
@@ -38,7 +59,9 @@ export async function GET(request: NextRequest) {
   });
 
   if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
+    const response = new ChatSDKError('unauthorized:chat').toResponse();
+    logResponse('unauthorized', response);
+    return response;
   }
 
   try {
@@ -51,10 +74,12 @@ export async function GET(request: NextRequest) {
     });
 
     if (!databaseUser) {
-      return new ChatSDKError(
+      const response = new ChatSDKError(
         'not_found:history',
         'User not found',
       ).toResponse();
+      logResponse('user-not-found', response);
+      return response;
     }
 
     const chats = await getChatsByUserId({
@@ -64,12 +89,16 @@ export async function GET(request: NextRequest) {
       endingBefore,
     });
 
-    return Response.json(chats);
+    const response = Response.json(chats);
+    logResponse('success', response);
+    return response;
   } catch (error) {
     console.error('Error in history API:', error);
-    return new ChatSDKError(
+    const response = new ChatSDKError(
       'bad_request:database',
       'Database error',
     ).toResponse();
+    logResponse('catch', response);
+    return response;
   }
 }

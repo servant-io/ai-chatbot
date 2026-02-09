@@ -1,6 +1,8 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
+
+export const runtime = 'nodejs';
 
 export async function GET(
   request: NextRequest,
@@ -10,14 +12,14 @@ export async function GET(
     const session = await withAuth();
 
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
 
     // Role-based access check - members cannot access full transcript content
     if (session.role === 'member') {
-      return NextResponse.json(
+      return Response.json(
         {
           error:
             'Access denied: Members cannot view transcript details. This feature is restricted to elevated roles only.',
@@ -28,7 +30,7 @@ export async function GET(
 
     const transcriptId = Number.parseInt(id);
     if (Number.isNaN(transcriptId)) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Invalid transcript ID' },
         { status: 400 },
       );
@@ -38,7 +40,7 @@ export async function GET(
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Database configuration missing' },
         { status: 500 },
       );
@@ -62,20 +64,20 @@ export async function GET(
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return NextResponse.json(
+        return Response.json(
           { error: 'Transcript not found or access denied' },
           { status: 404 },
         );
       }
       console.error('Database error:', error);
-      return NextResponse.json(
+      return Response.json(
         { error: 'Failed to fetch transcript' },
         { status: 500 },
       );
     }
 
     if (!data) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Transcript not found or access denied' },
         { status: 404 },
       );
@@ -84,13 +86,13 @@ export async function GET(
     // Extract cleaned content from transcript_content JSON
     const cleanedContent = data.transcript_content?.cleaned || null;
 
-    return NextResponse.json({
+    return Response.json({
       id: data.id,
       content: cleanedContent,
     });
   } catch (error) {
     console.error('API error:', error);
-    return NextResponse.json(
+    return Response.json(
       { error: 'Internal server error' },
       { status: 500 },
     );
