@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyDownloadToken } from '@/lib/mcp/download-token';
+import { isTranscriptSharedWithUserEmail } from '@/lib/db/queries';
 
 export async function GET(
   request: NextRequest,
@@ -87,11 +88,16 @@ export async function GET(
       return response;
     }
 
-    // Check role - members are blocked from downloading
-    if (payload.role === 'member') {
+    const isShared = await isTranscriptSharedWithUserEmail({
+      transcriptId,
+      userEmail: payload.email,
+    });
+
+    // Check role - members can download only when shared
+    if (payload.role === 'member' && !isShared) {
       const errorPayload = {
         error:
-          'Access denied. Members cannot download transcript content.',
+          'Access denied. Members can only download shared transcripts.',
       };
       const response = Response.json(errorPayload, { status: 403 });
       logResponse('role-blocked', response, errorPayload);
@@ -120,7 +126,7 @@ export async function GET(
       .eq('id', transcriptId);
 
     // Apply participant filter for non-admin roles (admin sees all)
-    if (payload.role !== 'admin') {
+    if (payload.role !== 'admin' && !isShared) {
       query = query.contains('verified_participant_emails', [payload.email]);
     }
 

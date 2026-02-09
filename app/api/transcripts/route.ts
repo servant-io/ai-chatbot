@@ -1,6 +1,23 @@
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
+import {
+  getDirectlySharedTranscriptIdsByUserEmail,
+  getEnabledTeamTranscriptRulesByUserEmail,
+  getSharedTranscriptTeamsByUserEmail,
+  shareTranscriptToTeam,
+} from '@/lib/db/queries';
+
+const extractTopicFromSummary = (summary: string): string => {
+  if (!summary) return '';
+
+  const topicMatch = summary.match(/Topic:\s*([^\n]*)/i);
+  if (topicMatch?.[1]) {
+    return topicMatch[1].trim();
+  }
+
+  return summary.split('\n')[0]?.trim() ?? '';
+};
 
 export const runtime = 'nodejs';
 
@@ -124,8 +141,64 @@ export async function GET(request: NextRequest) {
       return response;
     }
 
+    const canShareTranscripts = session.role !== 'member';
+
+    if (canShareTranscripts && user.email && data && data.length > 0) {
+      const rules = await getEnabledTeamTranscriptRulesByUserEmail({
+        userEmail: user.email,
+      });
+
+      if (rules.length > 0) {
+        for (const transcript of data) {
+          const topic = extractTopicFromSummary(transcript.summary ?? '');
+          if (!topic) continue;
+
+          for (const rule of rules) {
+            if (rule.type !== 'summary_topic_exact') continue;
+
+            if (topic.toLowerCase() === rule.value.trim().toLowerCase()) {
+              await shareTranscriptToTeam({
+                teamId: rule.teamId,
+                transcriptId: transcript.id,
+                createdByEmail: user.email,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const sharedTeamMap = new Map<number, Array<string>>();
+    let sharedTranscriptIds = new Set<number>();
+
+    if (user.email) {
+      const [teamShares, directShares] = await Promise.all([
+        getSharedTranscriptTeamsByUserEmail({ userEmail: user.email }),
+        getDirectlySharedTranscriptIdsByUserEmail({ userEmail: user.email }),
+      ]);
+
+      for (const share of teamShares) {
+        const names = sharedTeamMap.get(share.transcriptId);
+        if (names) {
+          names.push(share.teamName);
+        } else {
+          sharedTeamMap.set(share.transcriptId, [share.teamName]);
+        }
+      }
+
+      const teamShareIds = teamShares.map((share) => share.transcriptId);
+      sharedTranscriptIds = new Set([...teamShareIds, ...directShares]);
+    }
+
+    const items = (data ?? []).map((row) => ({
+      ...row,
+      can_view_full_content:
+        canShareTranscripts || sharedTranscriptIds.has(row.id),
+      shared_in_teams: sharedTeamMap.get(row.id) ?? [],
+    }));
+
     const payload = {
-      data: data || [],
+      data: items,
       pagination: {
         page,
         limit,

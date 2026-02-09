@@ -24,6 +24,8 @@ interface TranscriptsListProps {
 
 export function TranscriptsList({ isMember }: TranscriptsListProps) {
   const {
+    scope,
+    setScope,
     searchTerm,
     setSearchTerm,
     pagination,
@@ -42,6 +44,9 @@ export function TranscriptsList({ isMember }: TranscriptsListProps) {
     new Set(),
   );
 
+  const canShareTranscripts = !isMember;
+  const canViewFullContentDefault = !isMember;
+
   const handleSelectTranscript = (transcript: Transcript) => {
     if (isSelectionMode) {
       const newSelected = new Set(selectedTranscripts);
@@ -59,6 +64,14 @@ export function TranscriptsList({ isMember }: TranscriptsListProps) {
 
   const handleToggleSelectionMode = () => {
     setIsSelectionMode(!isSelectionMode);
+    setSelectedTranscripts(new Set());
+  };
+
+  const handleScopeChange = (nextScope: 'mine' | 'shared') => {
+    setScope(nextScope);
+    setSelectedTranscript(null);
+    setIsModalOpen(false);
+    setIsSelectionMode(false);
     setSelectedTranscripts(new Set());
   };
 
@@ -88,12 +101,36 @@ export function TranscriptsList({ isMember }: TranscriptsListProps) {
     selectedTranscripts.has(t.id),
   );
 
+  const canViewFullContent =
+    selectedTranscriptData.length === 0
+      ? canViewFullContentDefault
+      : selectedTranscriptData.every((t) => t.can_view_full_content === true);
+
   return (
     <div
       className={`space-y-6 ${
         isSelectionMode && selectedTranscripts.size > 0 ? 'pb-24' : ''
       }`}
     >
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={scope === 'mine' ? 'default' : 'outline'}
+          onClick={() => handleScopeChange('mine')}
+        >
+          My transcripts
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={scope === 'shared' ? 'default' : 'outline'}
+          onClick={() => handleScopeChange('shared')}
+        >
+          Shared with me
+        </Button>
+      </div>
+
       <TranscriptHeader
         searchTerm={searchTerm}
         onSearchTermChange={setSearchTerm}
@@ -140,7 +177,7 @@ export function TranscriptsList({ isMember }: TranscriptsListProps) {
       {isSelectionMode && selectedTranscripts.size > 0 && (
         <TranscriptChatInput
           selectedTranscripts={selectedTranscriptData}
-          isMember={isMember}
+          canViewFullContent={canViewFullContent}
         />
       )}
 
@@ -246,7 +283,7 @@ export function TranscriptsList({ isMember }: TranscriptsListProps) {
         transcript={selectedTranscript}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        isMember={isMember}
+        canShareTranscripts={canShareTranscripts}
       />
     </div>
   );

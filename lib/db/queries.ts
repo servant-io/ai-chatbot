@@ -36,6 +36,14 @@ import {
   type AgentVectorStoreFile,
   audioTranscription,
   type AudioTranscriptionUtterance,
+  team,
+  type Team,
+  teamMember,
+  type TeamMember,
+  teamTranscriptShare,
+  transcriptShare,
+  teamTranscriptRule,
+  type TeamTranscriptRule,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact';
 import { generateUUID } from '../utils';
@@ -1068,4 +1076,391 @@ export async function updateAudioTranscriptionSpeakerNames({
     });
 
   return updated || null;
+}
+
+export type TeamMembershipRole = 'owner' | 'member';
+
+export async function createTeam({
+  name,
+  createdByEmail,
+}: {
+  name: string;
+  createdByEmail: string;
+}): Promise<Team> {
+  try {
+    const createdTeam = await db.transaction(async (tx) => {
+      const [insertedTeam] = await tx
+        .insert(team)
+        .values({ name, createdByEmail })
+        .returning();
+
+      if (!insertedTeam) {
+        throw new ChatSDKError('bad_request:database', 'Failed to create team');
+      }
+
+      await tx.insert(teamMember).values({
+        teamId: insertedTeam.id,
+        userEmail: createdByEmail,
+        role: 'owner',
+        createdByEmail,
+      });
+
+      return insertedTeam;
+    });
+
+    return createdTeam;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to create team');
+  }
+}
+
+export async function getTeamsByUserEmail({
+  userEmail,
+}: {
+  userEmail: string;
+}): Promise<
+  Array<
+    Pick<Team, 'id' | 'name' | 'createdByEmail' | 'createdAt'> & {
+      role: TeamMember['role'];
+    }
+  >
+> {
+  try {
+    return await db
+      .select({
+        id: team.id,
+        name: team.name,
+        createdByEmail: team.createdByEmail,
+        createdAt: team.createdAt,
+        role: teamMember.role,
+      })
+      .from(teamMember)
+      .innerJoin(team, eq(teamMember.teamId, team.id))
+      .where(eq(teamMember.userEmail, userEmail))
+      .orderBy(asc(team.name));
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to list teams');
+  }
+}
+
+export async function getTeamByIdForUserEmail({
+  teamId,
+  userEmail,
+}: {
+  teamId: string;
+  userEmail: string;
+}): Promise<
+  | (Pick<Team, 'id' | 'name' | 'createdByEmail' | 'createdAt'> & {
+      role: TeamMember['role'];
+    })
+  | null
+> {
+  try {
+    const [row] = await db
+      .select({
+        id: team.id,
+        name: team.name,
+        createdByEmail: team.createdByEmail,
+        createdAt: team.createdAt,
+        role: teamMember.role,
+      })
+      .from(teamMember)
+      .innerJoin(team, eq(teamMember.teamId, team.id))
+      .where(and(eq(team.id, teamId), eq(teamMember.userEmail, userEmail)))
+      .limit(1);
+
+    return row || null;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to fetch team');
+  }
+}
+
+export async function getTeamMembersByTeamId({
+  teamId,
+}: {
+  teamId: string;
+}): Promise<Array<TeamMember>> {
+  try {
+    return await db
+      .select()
+      .from(teamMember)
+      .where(eq(teamMember.teamId, teamId))
+      .orderBy(asc(teamMember.userEmail));
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to list members');
+  }
+}
+
+export async function addTeamMemberByEmail({
+  teamId,
+  userEmail,
+  role,
+  createdByEmail,
+}: {
+  teamId: string;
+  userEmail: string;
+  role: TeamMembershipRole;
+  createdByEmail: string;
+}): Promise<void> {
+  try {
+    await db
+      .insert(teamMember)
+      .values({
+        teamId,
+        userEmail,
+        role,
+        createdByEmail,
+      })
+      .onConflictDoNothing();
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to add member');
+  }
+}
+
+export async function removeTeamMemberByEmail({
+  teamId,
+  userEmail,
+}: {
+  teamId: string;
+  userEmail: string;
+}): Promise<void> {
+  try {
+    await db
+      .delete(teamMember)
+      .where(
+        and(eq(teamMember.teamId, teamId), eq(teamMember.userEmail, userEmail)),
+      );
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to remove member');
+  }
+}
+
+export async function shareTranscriptToTeam({
+  teamId,
+  transcriptId,
+  createdByEmail,
+}: {
+  teamId: string;
+  transcriptId: number;
+  createdByEmail: string;
+}): Promise<void> {
+  try {
+    await db
+      .insert(teamTranscriptShare)
+      .values({
+        teamId,
+        transcriptId,
+        createdByEmail,
+      })
+      .onConflictDoNothing();
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to share transcript',
+    );
+  }
+}
+
+export async function shareTranscriptToUser({
+  transcriptId,
+  userEmail,
+  createdByEmail,
+}: {
+  transcriptId: number;
+  userEmail: string;
+  createdByEmail: string;
+}): Promise<void> {
+  try {
+    await db
+      .insert(transcriptShare)
+      .values({
+        transcriptId,
+        userEmail,
+        createdByEmail,
+      })
+      .onConflictDoNothing();
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to share transcript',
+    );
+  }
+}
+
+export type SharedTranscriptTeam = {
+  transcriptId: number;
+  teamId: string;
+  teamName: string;
+};
+
+export async function getSharedTranscriptTeamsByUserEmail({
+  userEmail,
+}: {
+  userEmail: string;
+}): Promise<Array<SharedTranscriptTeam>> {
+  try {
+    return await db
+      .select({
+        transcriptId: teamTranscriptShare.transcriptId,
+        teamId: team.id,
+        teamName: team.name,
+      })
+      .from(teamTranscriptShare)
+      .innerJoin(team, eq(teamTranscriptShare.teamId, team.id))
+      .innerJoin(teamMember, eq(teamTranscriptShare.teamId, teamMember.teamId))
+      .where(eq(teamMember.userEmail, userEmail));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to list shared transcripts',
+    );
+  }
+}
+
+export async function getDirectlySharedTranscriptIdsByUserEmail({
+  userEmail,
+}: {
+  userEmail: string;
+}): Promise<number[]> {
+  try {
+    const rows = await db
+      .select({ transcriptId: transcriptShare.transcriptId })
+      .from(transcriptShare)
+      .where(eq(transcriptShare.userEmail, userEmail));
+
+    return rows.map((row) => row.transcriptId);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to list direct transcript shares',
+    );
+  }
+}
+
+export async function isTranscriptSharedWithUserEmail({
+  transcriptId,
+  userEmail,
+}: {
+  transcriptId: number;
+  userEmail: string;
+}): Promise<boolean> {
+  try {
+    const [teamShareRow] = await db
+      .select({ transcriptId: teamTranscriptShare.transcriptId })
+      .from(teamTranscriptShare)
+      .innerJoin(teamMember, eq(teamTranscriptShare.teamId, teamMember.teamId))
+      .where(
+        and(
+          eq(teamTranscriptShare.transcriptId, transcriptId),
+          eq(teamMember.userEmail, userEmail),
+        ),
+      )
+      .limit(1);
+
+    if (teamShareRow) return true;
+
+    const [directShareRow] = await db
+      .select({ transcriptId: transcriptShare.transcriptId })
+      .from(transcriptShare)
+      .where(
+        and(
+          eq(transcriptShare.transcriptId, transcriptId),
+          eq(transcriptShare.userEmail, userEmail),
+        ),
+      )
+      .limit(1);
+
+    return Boolean(directShareRow);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to check transcript sharing',
+    );
+  }
+}
+
+export type TeamTranscriptRuleType = TeamTranscriptRule['type'];
+
+export async function getTeamTranscriptRulesByTeamId({
+  teamId,
+}: {
+  teamId: string;
+}): Promise<Array<TeamTranscriptRule>> {
+  try {
+    return await db
+      .select()
+      .from(teamTranscriptRule)
+      .where(eq(teamTranscriptRule.teamId, teamId))
+      .orderBy(desc(teamTranscriptRule.createdAt));
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to list rules');
+  }
+}
+
+export async function createTeamTranscriptRule({
+  teamId,
+  type,
+  value,
+  createdByEmail,
+}: {
+  teamId: string;
+  type: TeamTranscriptRuleType;
+  value: string;
+  createdByEmail: string;
+}): Promise<TeamTranscriptRule> {
+  try {
+    const [row] = await db
+      .insert(teamTranscriptRule)
+      .values({
+        teamId,
+        type,
+        value,
+        createdByEmail,
+      })
+      .returning();
+
+    if (!row) {
+      throw new ChatSDKError('bad_request:database', 'Failed to create rule');
+    }
+
+    return row;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to create rule');
+  }
+}
+
+export type EnabledTeamRule = {
+  teamId: string;
+  teamName: string;
+  ruleId: string;
+  type: TeamTranscriptRuleType;
+  value: string;
+};
+
+export async function getEnabledTeamTranscriptRulesByUserEmail({
+  userEmail,
+}: {
+  userEmail: string;
+}): Promise<Array<EnabledTeamRule>> {
+  try {
+    return await db
+      .select({
+        teamId: team.id,
+        teamName: team.name,
+        ruleId: teamTranscriptRule.id,
+        type: teamTranscriptRule.type,
+        value: teamTranscriptRule.value,
+      })
+      .from(teamMember)
+      .innerJoin(team, eq(teamMember.teamId, team.id))
+      .innerJoin(teamTranscriptRule, eq(teamTranscriptRule.teamId, team.id))
+      .where(
+        and(
+          eq(teamMember.userEmail, userEmail),
+          eq(teamTranscriptRule.enabled, true),
+        ),
+      );
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to list rules');
+  }
 }

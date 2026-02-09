@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
+import { isTranscriptSharedWithUserEmail } from '@/lib/db/queries';
 
 export const runtime = 'nodejs';
 
@@ -15,24 +16,34 @@ export async function GET(
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
-
-    // Role-based access check - members cannot access full transcript content
-    if (session.role === 'member') {
-      return Response.json(
-        {
-          error:
-            'Access denied: Members cannot view transcript details. This feature is restricted to elevated roles only.',
-        },
-        { status: 403 },
-      );
+    const userEmail = session.user.email;
+    if (!userEmail) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const { id } = await params;
 
     const transcriptId = Number.parseInt(id);
     if (Number.isNaN(transcriptId)) {
       return Response.json(
         { error: 'Invalid transcript ID' },
         { status: 400 },
+      );
+    }
+
+    const isShared = await isTranscriptSharedWithUserEmail({
+      transcriptId,
+      userEmail: userEmail,
+    });
+
+    // Members can view full content only when explicitly shared.
+    if (session.role === 'member' && !isShared) {
+      return Response.json(
+        {
+          error:
+            'Access denied: Members can only view transcript details when the transcript has been explicitly shared with them.',
+        },
+        { status: 403 },
       );
     }
 
@@ -53,10 +64,10 @@ export async function GET(
       .select('id, transcript_content, verified_participant_emails')
       .eq('id', transcriptId);
 
-    // Only return transcripts where user is a verified participant (applies to all users)
-    if (session.user.email) {
+    // Only enforce verified-participant access if the transcript is not explicitly shared.
+    if (!isShared) {
       query = query.contains('verified_participant_emails', [
-        session.user.email,
+        userEmail,
       ]);
     }
 
@@ -89,6 +100,7 @@ export async function GET(
     return Response.json({
       id: data.id,
       content: cleanedContent,
+      can_view_full_content: true,
     });
   } catch (error) {
     console.error('API error:', error);
