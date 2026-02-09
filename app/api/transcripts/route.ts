@@ -1,64 +1,66 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 
+export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
+  const debug = process.env.TRANSCRIPTS_DEBUG === '1';
+  const logResponse = (
+    label: string,
+    response: Response,
+    payload?: unknown,
+  ) => {
+    if (!debug) {
+      return;
+    }
+
+    console.log('transcripts route response', {
+      label,
+      payload,
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers),
+      isResponseInstance: response instanceof Response,
+      responseConstructor: response.constructor?.name,
+      responseTag: Object.prototype.toString.call(response),
+      responseHasBody: response.body !== null,
+      responseName: Response.name,
+    });
+  };
+
   console.log('transcripts route request', {
     url: request.url,
     method: request.method,
-    headers: Object.fromEntries(request.headers),
     xWorkosMiddleware: request.headers.get('x-workos-middleware'),
     xMiddlewareSubrequest: request.headers.get('x-middleware-subrequest'),
   });
   let session:
     | Awaited<ReturnType<typeof withAuth>>
     | undefined;
-  const logResponse = (
-    label: string,
-    response: Response,
-    payload?: unknown,
-  ) => {
-    console.log('transcripts route response', {
-      label,
-      payload,
-      response,
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers),
-      isResponseInstance: response instanceof Response,
-      isNextResponseInstance: response instanceof NextResponse,
-      responseConstructor: response.constructor?.name,
-      responseProto: Object.getPrototypeOf(response)?.constructor?.name,
-      responseTag: Object.prototype.toString.call(response),
-      responseHasBody: response.body !== null,
-      responseJsonType: typeof Response.json,
-      responseName: Response.name,
-    });
-  };
   try {
-    console.log('transcripts route before withAuth');
+    if (debug) {
+      console.log('transcripts route before withAuth');
+    }
     session = await withAuth();
-    console.log('transcripts route session raw', session);
-    console.log('transcripts route session', {
-      user: session.user,
-      sessionId: session.sessionId,
-      organizationId: session.organizationId,
-      role: session.role,
-      roles: session.roles,
-      permissions: session.permissions,
-      entitlements: session.entitlements,
-      featureFlags: session.featureFlags,
-      impersonator: session.impersonator,
-    });
+    if (debug) {
+      console.log('transcripts route session', {
+        hasUser: Boolean(session?.user),
+        sessionId: session?.sessionId,
+        organizationId: session?.organizationId,
+        role: session?.role,
+        roles: session?.roles,
+        permissions: session?.permissions,
+      });
+    }
 
-    const { user } = session;
-
-    if (!user) {
+    if (!session?.user) {
       const payload = { error: 'Unauthorized' };
-      const response = NextResponse.json(payload, { status: 401 });
+      const response = Response.json(payload, { status: 401 });
       logResponse('unauthorized', response, payload);
       return response;
     }
+    const { user } = session;
 
     // Parse pagination parameters
     const { searchParams } = new URL(request.url);
@@ -71,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     if (!supabaseUrl || !supabaseKey) {
       const payload = { error: 'Database configuration missing' };
-      const response = NextResponse.json(payload, { status: 500 });
+      const response = Response.json(payload, { status: 500 });
       logResponse('missing-db-config', response, payload);
       return response;
     }
@@ -117,7 +119,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Database error:', error);
       const payload = { error: 'Failed to fetch transcripts' };
-      const response = NextResponse.json(payload, { status: 500 });
+      const response = Response.json(payload, { status: 500 });
       logResponse('query-error', response, payload);
       return response;
     }
@@ -133,14 +135,20 @@ export async function GET(request: NextRequest) {
         hasPrev: page > 1,
       },
     };
-    const response = NextResponse.json(payload);
+    const response = Response.json(payload);
     logResponse('success', response, payload);
     return response;
   } catch (error) {
     console.error('API error:', error);
-    console.log('transcripts route session raw on error', session);
+    if (debug) {
+      console.log('transcripts route session on error', {
+        hasSession: Boolean(session),
+        hasUser: Boolean(session?.user),
+        sessionId: session?.sessionId,
+      });
+    }
     const payload = { error: 'Internal server error' };
-    const response = NextResponse.json(payload, { status: 500 });
+    const response = Response.json(payload, { status: 500 });
     logResponse('catch', response, payload);
     return response;
   }
