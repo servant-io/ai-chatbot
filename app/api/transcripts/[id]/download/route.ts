@@ -6,60 +6,106 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const debug = process.env.TRANSCRIPT_DOWNLOAD_DEBUG === '1';
+
+  const logResponse = (
+    label: string,
+    response: Response,
+    payload?: unknown,
+  ) => {
+    if (!debug) {
+      return;
+    }
+
+    console.log('transcript download route response', {
+      label,
+      payload,
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers),
+      isResponseInstance: response instanceof Response,
+      isNextResponseInstance: response instanceof NextResponse,
+      responseConstructor: response.constructor?.name,
+      responseTag: Object.prototype.toString.call(response),
+      responseHasBody: response.body !== null,
+    });
+  };
+
   try {
+    const sanitizedUrl = new URL(request.url);
+    const tokenFromUrl = sanitizedUrl.searchParams.get('token');
+    if (tokenFromUrl) {
+      sanitizedUrl.searchParams.set('token', '[redacted]');
+    }
+    if (debug) {
+      console.log('transcript download route request', {
+        method: request.method,
+        url: sanitizedUrl.toString(),
+        tokenPresent: Boolean(tokenFromUrl),
+        tokenLength: tokenFromUrl?.length ?? 0,
+      });
+    }
+
     const { id } = await params;
     const transcriptId = Number.parseInt(id, 10);
 
     if (Number.isNaN(transcriptId)) {
-      return NextResponse.json(
-        { error: 'Invalid transcript ID' },
-        { status: 400 },
-      );
+      const payload = { error: 'Invalid transcript ID' };
+      const response = NextResponse.json(payload, { status: 400 });
+      logResponse('invalid-transcript-id', response, payload);
+      return response;
     }
 
     const token = request.nextUrl.searchParams.get('token');
     if (!token) {
-      return NextResponse.json(
-        { error: 'Missing download token' },
-        { status: 401 },
-      );
+      const payload = { error: 'Missing download token' };
+      const response = NextResponse.json(payload, { status: 401 });
+      logResponse('missing-token', response, payload);
+      return response;
     }
 
     const payload = await verifyDownloadToken(token);
+    if (debug) {
+      console.log('transcript download route token payload', payload);
+    }
     if (!payload) {
-      return NextResponse.json(
-        { error: 'Invalid or expired download token' },
-        { status: 401 },
-      );
+      const errorPayload = { error: 'Invalid or expired download token' };
+      const response = NextResponse.json(errorPayload, { status: 401 });
+      logResponse('invalid-token', response, errorPayload);
+      return response;
     }
 
     // Verify transcript ID matches token
     if (payload.transcriptId !== transcriptId) {
-      return NextResponse.json(
-        { error: 'Token does not match requested transcript' },
-        { status: 403 },
-      );
+      const errorPayload = {
+        error: 'Token does not match requested transcript',
+      };
+      const response = NextResponse.json(errorPayload, { status: 403 });
+      logResponse('token-mismatch', response, errorPayload);
+      return response;
     }
 
     // Check role - members are blocked from downloading
     if (payload.role === 'member') {
-      return NextResponse.json(
-        {
-          error:
-            'Access denied. Members cannot download transcript content.',
-        },
-        { status: 403 },
-      );
+      const errorPayload = {
+        error:
+          'Access denied. Members cannot download transcript content.',
+      };
+      const response = NextResponse.json(errorPayload, { status: 403 });
+      logResponse('role-blocked', response, errorPayload);
+      return response;
     }
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
-        { error: 'Supabase credentials not configured' },
-        { status: 500 },
-      );
+      const errorPayload = {
+        error: 'Supabase credentials not configured',
+      };
+      const response = NextResponse.json(errorPayload, { status: 500 });
+      logResponse('missing-supabase-config', response, errorPayload);
+      return response;
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -77,25 +123,43 @@ export async function GET(
     }
 
     const { data, error } = await query.single();
+    if (debug) {
+      console.log('transcript download route supabase result', {
+        data,
+        error,
+      });
+    } else {
+      console.log('transcript download route supabase result', {
+        transcriptId,
+        hasData: Boolean(data),
+        error,
+      });
+    }
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Transcript not found or access denied' },
-          { status: 404 },
-        );
+        const errorPayload = {
+          error: 'Transcript not found or access denied',
+        };
+        const response = NextResponse.json(errorPayload, { status: 404 });
+        logResponse('not-found-or-denied', response, errorPayload);
+        return response;
       }
-      return NextResponse.json(
-        { error: `Database error: ${error.message}` },
-        { status: 500 },
-      );
+      const errorPayload = {
+        error: `Database error: ${error.message}`,
+      };
+      const response = NextResponse.json(errorPayload, { status: 500 });
+      logResponse('db-error', response, errorPayload);
+      return response;
     }
 
     if (!data) {
-      return NextResponse.json(
-        { error: 'Transcript not found or access denied' },
-        { status: 404 },
-      );
+      const errorPayload = {
+        error: 'Transcript not found or access denied',
+      };
+      const response = NextResponse.json(errorPayload, { status: 404 });
+      logResponse('no-data', response, errorPayload);
+      return response;
     }
 
     // Format the transcript as markdown
@@ -143,18 +207,20 @@ ${data.summary || 'No summary available'}
 ${transcriptContent}
 `;
 
-    return new NextResponse(markdown, {
+    const response = new NextResponse(markdown, {
       status: 200,
       headers: {
         'Content-Type': 'text/markdown; charset=utf-8',
         'Content-Disposition': `attachment; filename="transcript-${transcriptId}.md"`,
       },
     });
+    logResponse('success', response);
+    return response;
   } catch (err) {
     console.error('Download route error:', err);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    const payload = { error: 'Internal server error' };
+    const response = NextResponse.json(payload, { status: 500 });
+    logResponse('catch', response, payload);
+    return response;
   }
 }
