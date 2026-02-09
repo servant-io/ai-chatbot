@@ -1,7 +1,9 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { isTranscriptSharedWithUserEmail } from '@/lib/db/queries';
+
+export const runtime = 'nodejs';
 
 export async function GET(
   request: NextRequest,
@@ -11,18 +13,19 @@ export async function GET(
     const session = await withAuth();
 
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!session.user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userEmail = session.user.email;
+    if (!userEmail) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
 
     const transcriptId = Number.parseInt(id);
     if (Number.isNaN(transcriptId)) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Invalid transcript ID' },
         { status: 400 },
       );
@@ -30,12 +33,12 @@ export async function GET(
 
     const isShared = await isTranscriptSharedWithUserEmail({
       transcriptId,
-      userEmail: session.user.email,
+      userEmail: userEmail,
     });
 
     // Members can view full content only when explicitly shared.
     if (session.role === 'member' && !isShared) {
-      return NextResponse.json(
+      return Response.json(
         {
           error:
             'Access denied: Members can only view transcript details when the transcript has been explicitly shared with them.',
@@ -48,7 +51,7 @@ export async function GET(
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Database configuration missing' },
         { status: 500 },
       );
@@ -64,7 +67,7 @@ export async function GET(
     // Only enforce verified-participant access if the transcript is not explicitly shared.
     if (!isShared) {
       query = query.contains('verified_participant_emails', [
-        session.user.email,
+        userEmail,
       ]);
     }
 
@@ -72,20 +75,20 @@ export async function GET(
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return NextResponse.json(
+        return Response.json(
           { error: 'Transcript not found or access denied' },
           { status: 404 },
         );
       }
       console.error('Database error:', error);
-      return NextResponse.json(
+      return Response.json(
         { error: 'Failed to fetch transcript' },
         { status: 500 },
       );
     }
 
     if (!data) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Transcript not found or access denied' },
         { status: 404 },
       );
@@ -94,14 +97,14 @@ export async function GET(
     // Extract cleaned content from transcript_content JSON
     const cleanedContent = data.transcript_content?.cleaned || null;
 
-    return NextResponse.json({
+    return Response.json({
       id: data.id,
       content: cleanedContent,
       can_view_full_content: true,
     });
   } catch (error) {
     console.error('API error:', error);
-    return NextResponse.json(
+    return Response.json(
       { error: 'Internal server error' },
       { status: 500 },
     );

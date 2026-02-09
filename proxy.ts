@@ -1,4 +1,5 @@
-import { authkitMiddleware } from '@workos-inc/authkit-nextjs';
+import type { NextRequest } from 'next/server';
+import { authkit, handleAuthkitHeaders } from '@workos-inc/authkit-nextjs';
 
 // Prefer explicit redirect URI; fall back to preview deployment URL
 const fallbackHost =
@@ -11,32 +12,81 @@ const REDIRECT_URI =
   process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI ||
   computedRedirectUri;
 
-const authMiddleware = authkitMiddleware({
-  redirectUri: REDIRECT_URI,
-  middlewareAuth: {
-    enabled: true,
-    unauthenticatedPaths: [
-      '/login',
-      '/register',
-      '/callback',
-      '/ping',
-      '/.well-known/oauth-protected-resource',
-      '/.well-known/oauth-protected-resource/:path*',
-      '/.well-known/oauth-authorization-server',
-      '/.well-known/workflow/v1/flow',
-      '/.well-known/workflow/v1/step',
-      '/.well-known/workflow/v1/webhook/:token',
-      '/mcp',
-      '/sse',
-      '/message',
-      '/api/mcp',
-      '/api/transcripts/:id/download',
-    ],
-  },
-  debug: true,
-});
+const unauthenticatedPaths = [
+  '/login',
+  '/register',
+  '/callback',
+  '/ping',
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-protected-resource/:path*',
+  '/.well-known/oauth-authorization-server',
+  '/.well-known/workflow/v1/flow',
+  '/.well-known/workflow/v1/step',
+  '/.well-known/workflow/v1/webhook/:token',
+  '/mcp',
+  '/sse',
+  '/message',
+  '/api/mcp',
+  '/api/transcripts/:id/download',
+];
 
-export default authMiddleware;
+const matchesPathPattern = (pathname: string, pattern: string) => {
+  const pathSegments = pathname.split('/').filter(Boolean);
+  const patternSegments = pattern.split('/').filter(Boolean);
+
+  for (let index = 0; index < patternSegments.length; index += 1) {
+    const patternSegment = patternSegments[index];
+
+    if (patternSegment?.startsWith(':') && patternSegment.endsWith('*')) {
+      return true;
+    }
+
+    const pathSegment = pathSegments[index];
+    if (!pathSegment) {
+      return false;
+    }
+
+    if (patternSegment?.startsWith(':')) {
+      continue;
+    }
+
+    if (patternSegment !== pathSegment) {
+      return false;
+    }
+  }
+
+  return pathSegments.length === patternSegments.length;
+};
+
+const isUnauthenticatedPath = (pathname: string, allowlist: string[]) =>
+  allowlist.some((pattern) => matchesPathPattern(pathname, pattern));
+
+export default async function proxy(request: NextRequest) {
+  const allowlist = [...unauthenticatedPaths];
+
+  if (REDIRECT_URI) {
+    const redirectPathname = new URL(REDIRECT_URI).pathname;
+    if (!allowlist.includes(redirectPathname)) {
+      allowlist.push(redirectPathname);
+    }
+  }
+
+  const { session, headers, authorizationUrl } = await authkit(request, {
+    redirectUri: REDIRECT_URI,
+    debug: true,
+  });
+
+  const { pathname } = request.nextUrl;
+  const isAllowed = isUnauthenticatedPath(pathname, allowlist);
+
+  if (!isAllowed && !session.user && authorizationUrl) {
+    return handleAuthkitHeaders(request, headers, {
+      redirect: authorizationUrl,
+    });
+  }
+
+  return handleAuthkitHeaders(request, headers);
+}
 
 export const config = {
   matcher: [
