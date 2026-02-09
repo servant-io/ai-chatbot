@@ -65,7 +65,10 @@ export async function GET(
 
     const payload = await verifyDownloadToken(token);
     if (debug) {
-      console.log('transcript download route token payload', payload);
+      console.log('transcript download route token payload', {
+        role: payload?.role,
+        transcriptId: payload?.transcriptId,
+      });
     }
     if (!payload) {
       const errorPayload = { error: 'Invalid or expired download token' };
@@ -123,9 +126,49 @@ export async function GET(
 
     const { data, error } = await query.single();
     if (debug) {
+      const transcriptContent =
+        typeof data?.transcript_content === 'object' &&
+        data.transcript_content !== null
+          ? (data.transcript_content as Record<string, unknown>)
+          : null;
+
+      const transcriptRaw =
+        transcriptContent && typeof transcriptContent.raw === 'string'
+          ? transcriptContent.raw
+          : null;
+
+      const transcriptCleaned =
+        transcriptContent && typeof transcriptContent.cleaned === 'string'
+          ? transcriptContent.cleaned
+          : null;
+
       console.log('transcript download route supabase result', {
-        data,
         error,
+        hasData: Boolean(data),
+        dataSummary: data
+          ? {
+              id: data.id,
+              recording_start: data.recording_start,
+              summaryLength:
+                typeof data.summary === 'string' ? data.summary.length : null,
+              meetingType: data.meeting_type,
+              projectsCount: Array.isArray(data.projects)
+                ? data.projects.length
+                : null,
+              extractedParticipantsCount: Array.isArray(
+                data.extracted_participants,
+              )
+                ? data.extracted_participants.length
+                : null,
+              verifiedParticipantEmailsCount: Array.isArray(
+                data.verified_participant_emails,
+              )
+                ? data.verified_participant_emails.length
+                : null,
+              transcriptRawLength: transcriptRaw?.length ?? null,
+              transcriptCleanedLength: transcriptCleaned?.length ?? null,
+            }
+          : null,
       });
     } else {
       console.log('transcript download route supabase result', {
