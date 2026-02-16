@@ -4,6 +4,9 @@ import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 
+const toNativeResponse = (response: Response) =>
+  new Response(response.body, response);
+
 export async function GET(request: NextRequest) {
   const debug = process.env.TRANSCRIPTS_DEBUG === '1';
   const logResponse = (
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest) {
       const payload = { error: 'Unauthorized' };
       const response = Response.json(payload, { status: 401 });
       logResponse('unauthorized', response, payload);
-      return response;
+      return toNativeResponse(response);
     }
     const { user } = session;
 
@@ -75,7 +78,7 @@ export async function GET(request: NextRequest) {
       const payload = { error: 'Database configuration missing' };
       const response = Response.json(payload, { status: 500 });
       logResponse('missing-db-config', response, payload);
-      return response;
+      return toNativeResponse(response);
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -121,7 +124,7 @@ export async function GET(request: NextRequest) {
       const payload = { error: 'Failed to fetch transcripts' };
       const response = Response.json(payload, { status: 500 });
       logResponse('query-error', response, payload);
-      return response;
+      return toNativeResponse(response);
     }
 
     const payload = {
@@ -137,7 +140,7 @@ export async function GET(request: NextRequest) {
     };
     const response = Response.json(payload);
     logResponse('success', response, payload);
-    return response;
+    return toNativeResponse(response);
   } catch (error) {
     console.error('API error:', error);
     if (debug) {
@@ -150,6 +153,6 @@ export async function GET(request: NextRequest) {
     const payload = { error: 'Internal server error' };
     const response = Response.json(payload, { status: 500 });
     logResponse('catch', response, payload);
-    return response;
+    return toNativeResponse(response);
   }
 }
