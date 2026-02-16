@@ -2,10 +2,11 @@ import { withAuth } from '@workos-inc/authkit-nextjs';
 import type { NextRequest } from 'next/server';
 import { getChatsByUserId, getDatabaseUserFromWorkOS } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
+import { toNativeResponse } from '@/lib/server/next-response';
 
 export const runtime = 'nodejs';
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const debug = process.env.HISTORY_DEBUG === '1';
   const logResponse = (label: string, response: Response) => {
     if (!debug) {
@@ -23,7 +24,6 @@ export async function GET(request: NextRequest) {
       responseHasBody: response.body !== null,
     });
   };
-
   console.log('history route request', {
     url: request.url,
     method: request.method,
@@ -101,4 +101,9 @@ export async function GET(request: NextRequest) {
     logResponse('catch', response);
     return response;
   }
+}
+
+export async function GET(...args: Parameters<typeof handleGET>) {
+  const response = await handleGET(...args);
+  return toNativeResponse(response);
 }
