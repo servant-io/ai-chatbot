@@ -2,9 +2,8 @@ import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { toNativeResponse } from '@/lib/server/next-response';
-
 export const runtime = 'nodejs';
-
+import { extractCleanedTranscriptText } from '@/lib/transcripts/content';
 async function handleGET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -85,7 +84,7 @@ async function handleGET(
     }
 
     // Extract cleaned content from transcript_content JSON
-    const cleanedContent = data.transcript_content?.cleaned || null;
+    const cleanedContent = extractCleanedTranscriptText(data.transcript_content);
 
     return Response.json({
       id: data.id,

@@ -3,7 +3,6 @@ import type { NextRequest } from 'next/server';
 import { getChatsByUserId, getDatabaseUserFromWorkOS } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 import { toNativeResponse } from '@/lib/server/next-response';
-
 export const runtime = 'nodejs';
 
 async function handleGET(request: NextRequest) {

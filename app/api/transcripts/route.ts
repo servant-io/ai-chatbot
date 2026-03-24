@@ -3,7 +3,6 @@ import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
-
 const toNativeResponse = (response: Response) =>
   new Response(response.body, response);
 
