@@ -1,6 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyDownloadToken } from '@/lib/mcp/download-token';
+import {
+  FULL_TRANSCRIPT_TEXT_SELECT,
+  formatTranscriptMarkdown,
+  isTranscriptContentRestrictedRole,
+  parseTranscriptTextRecord,
+} from '@/lib/transcripts/content';
 
 export async function GET(
   request: NextRequest,
@@ -42,7 +48,7 @@ export async function GET(
     }
 
     // Check role - members are blocked from downloading
-    if (payload.role === 'member') {
+    if (isTranscriptContentRestrictedRole(payload.role)) {
       return NextResponse.json(
         {
           error:
@@ -66,9 +72,7 @@ export async function GET(
 
     let query = supabase
       .from('transcripts')
-      .select(
-        'id, recording_start, summary, transcript_content, projects, clients, meeting_type, extracted_participants, verified_participant_emails',
-      )
+      .select(FULL_TRANSCRIPT_TEXT_SELECT)
       .eq('id', transcriptId);
 
     // Apply participant filter for non-admin roles (admin sees all)
@@ -98,50 +102,8 @@ export async function GET(
       );
     }
 
-    // Format the transcript as markdown
-    const recordingDate = data.recording_start
-      ? new Date(data.recording_start).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })
-      : 'Unknown';
-
-    const participants = data.extracted_participants
-      ? (data.extracted_participants as string[]).join(', ')
-      : 'Unknown';
-
-    const projects = data.projects
-      ? (data.projects as string[]).join(', ')
-      : 'None';
-
-    const clients = data.clients
-      ? (data.clients as string[]).join(', ')
-      : 'None';
-
-    const transcriptContent =
-      typeof data.transcript_content === 'object' &&
-      data.transcript_content !== null &&
-      'cleaned' in data.transcript_content
-        ? (data.transcript_content as { cleaned: string }).cleaned
-        : 'No transcript content available';
-
-    const markdown = `# Transcript ${data.id}
-
-**Date**: ${recordingDate}
-**Meeting Type**: ${data.meeting_type || 'Unknown'}
-**Participants**: ${participants}
-**Projects**: ${projects}
-**Clients**: ${clients}
-
-## Summary
-
-${data.summary || 'No summary available'}
-
-## Content
-
-${transcriptContent}
-`;
+    const transcript = parseTranscriptTextRecord(data);
+    const markdown = formatTranscriptMarkdown(transcript);
 
     return new NextResponse(markdown, {
       status: 200,

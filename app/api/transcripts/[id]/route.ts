@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { toNativeResponse } from '@/lib/server/next-response';
+import { extractCleanedTranscriptText } from '@/lib/transcripts/content';
 
 async function handleGET(
   request: NextRequest,
@@ -83,7 +84,7 @@ async function handleGET(
     }
 
     // Extract cleaned content from transcript_content JSON
-    const cleanedContent = data.transcript_content?.cleaned || null;
+    const cleanedContent = extractCleanedTranscriptText(data.transcript_content);
 
     return NextResponse.json({
       id: data.id,
