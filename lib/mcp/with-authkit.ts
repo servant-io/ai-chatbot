@@ -7,14 +7,24 @@ export type WorkOSUser = Awaited<
 >;
 
 const authkitDomain = process.env.AUTHKIT_DOMAIN;
+const workosClientId = process.env.WORKOS_CLIENT_ID;
 
 if (!authkitDomain) {
   throw new Error('AUTHKIT_DOMAIN environment variable is required');
 }
 
+if (!workosClientId) {
+  throw new Error('WORKOS_CLIENT_ID environment variable is required');
+}
+
 const jwks = jose.createRemoteJWKSet(
-  new URL(`https://${authkitDomain}/oauth2/jwks`),
+  new URL(getWorkOS().userManagement.getJwksUrl(workosClientId)),
 );
+
+const acceptedIssuers = [
+  `https://${authkitDomain}`,
+  `https://api.workos.com/user_management/${workosClientId}`,
+];
 
 export const verifyToken = async (
   req: Request,
@@ -23,7 +33,7 @@ export const verifyToken = async (
   if (!bearerToken) return undefined;
 
   const { payload } = await jose.jwtVerify(bearerToken, jwks, {
-    issuer: `https://${authkitDomain}`,
+    issuer: acceptedIssuers,
   });
 
   if (!payload.sub || typeof payload.sub !== 'string') return undefined;
@@ -37,10 +47,11 @@ export const verifyToken = async (
 
   if (orgId) {
     try {
-      const memberships = await workos.userManagement.listOrganizationMemberships({
-        userId: payload.sub,
-        organizationId: orgId,
-      });
+      const memberships =
+        await workos.userManagement.listOrganizationMemberships({
+          userId: payload.sub,
+          organizationId: orgId,
+        });
 
       if (memberships.data.length > 0) {
         role = memberships.data[0].role?.slug || null;

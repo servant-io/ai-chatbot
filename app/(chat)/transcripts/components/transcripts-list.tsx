@@ -19,10 +19,10 @@ import { TranscriptCard } from './list/transcript-card';
 import { TranscriptChatInput } from './list/transcript-chat-input';
 
 interface TranscriptsListProps {
-  isMember: boolean;
+  canShareTranscripts: boolean;
 }
 
-export function TranscriptsList({ isMember }: TranscriptsListProps) {
+export function TranscriptsList({ canShareTranscripts }: TranscriptsListProps) {
   const {
     scope,
     setScope,
@@ -44,8 +44,7 @@ export function TranscriptsList({ isMember }: TranscriptsListProps) {
     new Set(),
   );
 
-  const canShareTranscripts = !isMember;
-  const canViewFullContentDefault = !isMember;
+  const canViewFullContentDefault = canShareTranscripts;
 
   const handleSelectTranscript = (transcript: Transcript) => {
     if (isSelectionMode) {
@@ -73,6 +72,25 @@ export function TranscriptsList({ isMember }: TranscriptsListProps) {
     setIsModalOpen(false);
     setIsSelectionMode(false);
     setSelectedTranscripts(new Set());
+  };
+
+  const handleTranscriptShared = ({
+    transcriptId,
+    sharedWithEmails,
+  }: {
+    transcriptId: number;
+    sharedWithEmails: string[];
+  }) => {
+    setSelectedTranscript((current) => {
+      if (!current || current.id !== transcriptId) {
+        return current;
+      }
+
+      return {
+        ...current,
+        shared_with_emails: sharedWithEmails,
+      };
+    });
   };
 
   if (isLoading) {
@@ -280,10 +298,12 @@ export function TranscriptsList({ isMember }: TranscriptsListProps) {
       )}
 
       <TranscriptSheet
+        key={`${selectedTranscript?.id ?? 'none'}-${isModalOpen ? 'open' : 'closed'}`}
         transcript={selectedTranscript}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         canShareTranscripts={canShareTranscripts}
+        onTranscriptShared={handleTranscriptShared}
       />
     </div>
   );

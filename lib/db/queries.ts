@@ -1287,6 +1287,76 @@ export async function shareTranscriptToUser({
   }
 }
 
+export type TranscriptShareEntry = {
+  transcriptId: number;
+  userEmail: string;
+  createdAt: Date;
+  createdByEmail: string;
+};
+
+export async function unshareTranscriptFromUser({
+  transcriptId,
+  userEmail,
+}: {
+  transcriptId: number;
+  userEmail: string;
+}): Promise<void> {
+  try {
+    await db
+      .delete(transcriptShare)
+      .where(
+        and(
+          eq(transcriptShare.transcriptId, transcriptId),
+          eq(transcriptShare.userEmail, userEmail),
+        ),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to unshare transcript',
+    );
+  }
+}
+
+export async function getTranscriptSharesByTranscriptId({
+  transcriptId,
+}: {
+  transcriptId: number;
+}): Promise<Array<TranscriptShareEntry>> {
+  return getTranscriptSharesByTranscriptIds({ transcriptIds: [transcriptId] });
+}
+
+export async function getTranscriptSharesByTranscriptIds({
+  transcriptIds,
+}: {
+  transcriptIds: number[];
+}): Promise<Array<TranscriptShareEntry>> {
+  if (transcriptIds.length === 0) {
+    return [];
+  }
+
+  try {
+    return await db
+      .select({
+        transcriptId: transcriptShare.transcriptId,
+        userEmail: transcriptShare.userEmail,
+        createdAt: transcriptShare.createdAt,
+        createdByEmail: transcriptShare.createdByEmail,
+      })
+      .from(transcriptShare)
+      .where(inArray(transcriptShare.transcriptId, transcriptIds))
+      .orderBy(
+        asc(transcriptShare.transcriptId),
+        asc(transcriptShare.userEmail),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to list transcript shares',
+    );
+  }
+}
+
 export type SharedTranscriptTeam = {
   transcriptId: number;
   teamId: string;
@@ -1345,20 +1415,6 @@ export async function isTranscriptSharedWithUserEmail({
   userEmail: string;
 }): Promise<boolean> {
   try {
-    const [teamShareRow] = await db
-      .select({ transcriptId: teamTranscriptShare.transcriptId })
-      .from(teamTranscriptShare)
-      .innerJoin(teamMember, eq(teamTranscriptShare.teamId, teamMember.teamId))
-      .where(
-        and(
-          eq(teamTranscriptShare.transcriptId, transcriptId),
-          eq(teamMember.userEmail, userEmail),
-        ),
-      )
-      .limit(1);
-
-    if (teamShareRow) return true;
-
     const [directShareRow] = await db
       .select({ transcriptId: transcriptShare.transcriptId })
       .from(transcriptShare)

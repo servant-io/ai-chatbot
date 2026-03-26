@@ -1,15 +1,16 @@
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { TranscriptsList } from './components/transcripts-list';
 import { SidebarPageHeader } from '@/components/sidebar-page-header';
+import { canShareTranscripts } from '@/lib/transcripts/access';
 
 export default async function TranscriptsPage() {
   const session = await withAuth({ ensureSignedIn: true });
   const { user } = session;
 
   // Role-based access check
-  const isMemberRole = session.role === 'member';
+  const canCurrentUserShareTranscripts = canShareTranscripts(session.role);
   console.log(
-    `📋 Transcripts page - User ${user.email} has role '${session.role}' (${isMemberRole ? 'MEMBER - limited access' : 'ELEVATED - full access'})`,
+    `📋 Transcripts page - User ${user.email} has role '${session.role}' (${canCurrentUserShareTranscripts ? 'CAN SHARE TRANSCRIPTS' : 'LIMITED TO ASSIGNED SHARES'})`,
   );
 
   return (
@@ -23,7 +24,7 @@ export default async function TranscriptsPage() {
           </p>
         </div>
 
-        <TranscriptsList isMember={isMemberRole} />
+        <TranscriptsList canShareTranscripts={canCurrentUserShareTranscripts} />
       </div>
     </>
   );

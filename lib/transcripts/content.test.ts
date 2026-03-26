@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   extractCleanedTranscriptText,
   formatTranscriptMarkdown,
-  isTranscriptContentRestrictedRole,
   parseTranscriptTextRecord,
 } from './content';
 
@@ -52,14 +51,5 @@ describe('transcript text formatting', () => {
       'Speaker: Hello there',
     );
     expect(formatTranscriptMarkdown(transcript)).not.toContain('WEBVTT');
-  });
-});
-
-describe('isTranscriptContentRestrictedRole', () => {
-  it('restricts members and allows other roles', () => {
-    expect(isTranscriptContentRestrictedRole('member')).toBe(true);
-    expect(isTranscriptContentRestrictedRole('admin')).toBe(false);
-    expect(isTranscriptContentRestrictedRole('org-fte')).toBe(false);
-    expect(isTranscriptContentRestrictedRole(null)).toBe(false);
   });
 });

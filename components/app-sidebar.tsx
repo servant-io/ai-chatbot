@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 
 import { PlusIcon, FileIcon, BotIcon } from '@/components/icons';
-import { Mic, Users } from 'lucide-react';
+import { Mic } from 'lucide-react';
 import { SidebarHistory } from '@/components/sidebar-history';
 import { SidebarUserNav } from '@/components/sidebar-user-nav';
 import { Button } from '@/components/ui/button';
@@ -79,18 +79,6 @@ export function AppSidebar({ user }: { user: any | undefined }) {
                   >
                     <FileIcon />
                     <span>Transcripts</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/teams"
-                    onClick={() => setOpenMobile(false)}
-                    className="flex items-center gap-3"
-                  >
-                    <Users className="size-4" />
-                    <span>Teams</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

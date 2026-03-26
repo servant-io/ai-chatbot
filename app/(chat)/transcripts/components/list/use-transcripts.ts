@@ -12,7 +12,7 @@ export interface Transcript {
   extracted_participants: string[];
   verified_participant_emails?: string[];
   can_view_full_content?: boolean;
-  shared_in_teams?: string[];
+  shared_with_emails?: string[];
 }
 
 interface PaginationInfo {
@@ -25,7 +25,7 @@ interface PaginationInfo {
 }
 
 export function useTranscripts() {
-  // Default scope is "mine" (/api/transcripts). Use "shared" for team-shared items.
+  // Default scope is "mine" (/api/transcripts). Use "shared" for explicitly shared items.
   const [scope, setScopeState] = useState<'mine' | 'shared'>('mine');
   const [searchTerm, setSearchTermState] = useState('');
   const [pagination, setPagination] = useState<PaginationInfo>({

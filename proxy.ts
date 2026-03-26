@@ -64,7 +64,7 @@ const isUnauthenticatedPath = (pathname: string, allowlist: string[]) =>
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Keep Playwright/webServer readiness independent from AuthKit.
+  // Keep local readiness independent from AuthKit.
   if (pathname === '/ping') {
     return new Response('ok', {
       status: 200,

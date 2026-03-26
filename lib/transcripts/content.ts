@@ -33,10 +33,6 @@ export type TranscriptTextRecord = z.infer<typeof transcriptTextRecordSchema>;
 export const FULL_TRANSCRIPT_TEXT_SELECT =
   'id, recording_start, summary, transcript_content, projects, clients, meeting_type, extracted_participants';
 
-export const isTranscriptContentRestrictedRole = (
-  role: string | null,
-): boolean => role === 'member';
-
 export const parseTranscriptTextRecord = (
   value: unknown,
 ): TranscriptTextRecord => transcriptTextRecordSchema.parse(value);

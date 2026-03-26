@@ -2,10 +2,8 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
-import {
-  getDirectlySharedTranscriptIdsByUserEmail,
-  getSharedTranscriptTeamsByUserEmail,
-} from '@/lib/db/queries';
+import { getDirectlySharedTranscriptIdsByUserEmail } from '@/lib/db/queries';
+import { getTranscriptAccessSummaries } from '@/lib/transcripts/access-management';
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,25 +19,10 @@ export async function GET(request: NextRequest) {
     const limit = Number.parseInt(searchParams.get('limit') || '20', 10);
     const offset = (page - 1) * limit;
 
-    const [teamShares, directShares] = await Promise.all([
-      getSharedTranscriptTeamsByUserEmail({ userEmail: email }),
+    const [directShares] = await Promise.all([
       getDirectlySharedTranscriptIdsByUserEmail({ userEmail: email }),
     ]);
-
-    const sharedByTranscriptId = new Map<number, Array<string>>();
-    for (const row of teamShares) {
-      const teams = sharedByTranscriptId.get(row.transcriptId);
-      if (teams) {
-        teams.push(row.teamName);
-      } else {
-        sharedByTranscriptId.set(row.transcriptId, [row.teamName]);
-      }
-    }
-
-    const teamShareIds = teamShares.map((share) => share.transcriptId);
-    const sharedTranscriptIds = Array.from(
-      new Set([...teamShareIds, ...directShares]),
-    );
+    const sharedTranscriptIds = Array.from(new Set(directShares));
     const total = sharedTranscriptIds.length;
 
     if (sharedTranscriptIds.length === 0) {
@@ -84,10 +67,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const accessSummaries = await getTranscriptAccessSummaries({
+      transcriptIds: (data ?? []).map((row) => row.id),
+    });
+    const accessByTranscriptId = new Map(
+      accessSummaries.map((summary) => [summary.transcriptId, summary]),
+    );
+
     const items = (data ?? []).map((row) => ({
       ...row,
       can_view_full_content: true,
-      shared_in_teams: sharedByTranscriptId.get(row.id) ?? [],
+      shared_with_emails:
+        accessByTranscriptId.get(row.id)?.sharedWithEmails ?? [],
     }));
 
     return NextResponse.json({

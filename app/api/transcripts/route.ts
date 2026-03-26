@@ -1,51 +1,67 @@
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
-import {
-  getDirectlySharedTranscriptIdsByUserEmail,
-  getEnabledTeamTranscriptRulesByUserEmail,
-  getSharedTranscriptTeamsByUserEmail,
-  shareTranscriptToTeam,
-} from '@/lib/db/queries';
+import { getDirectlySharedTranscriptIdsByUserEmail } from '@/lib/db/queries';
+import { canManageTranscriptAccess } from '@/lib/transcripts/access';
+import { getTranscriptAccessSummaries } from '@/lib/transcripts/access-management';
 
-const extractTopicFromSummary = (summary: string): string => {
-  if (!summary) return '';
-
-  const topicMatch = summary.match(/Topic:\s*([^\n]*)/i);
-  if (topicMatch?.[1]) {
-    return topicMatch[1].trim();
-  }
-
-  return summary.split('\n')[0]?.trim() ?? '';
-};
+export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
+  const debug = process.env.TRANSCRIPTS_DEBUG === '1';
+  const logResponse = (
+    label: string,
+    response: Response,
+    payload?: unknown,
+  ) => {
+    if (!debug) {
+      return;
+    }
+
+    console.log('transcripts route response', {
+      label,
+      payload,
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers),
+      isResponseInstance: response instanceof Response,
+      responseConstructor: response.constructor?.name,
+      responseTag: Object.prototype.toString.call(response),
+      responseHasBody: response.body !== null,
+      responseName: Response.name,
+    });
+  };
+
   console.log('transcripts route request', {
     url: request.url,
     method: request.method,
-    headers: Object.fromEntries(request.headers),
     xWorkosMiddleware: request.headers.get('x-workos-middleware'),
     xMiddlewareSubrequest: request.headers.get('x-middleware-subrequest'),
   });
+  let session: Awaited<ReturnType<typeof withAuth>> | undefined;
   try {
-    const session = await withAuth();
-    console.log('transcripts route session', {
-      user: session.user,
-      sessionId: session.sessionId,
-      organizationId: session.organizationId,
-      role: session.role,
-      roles: session.roles,
-      permissions: session.permissions,
-      entitlements: session.entitlements,
-      featureFlags: session.featureFlags,
-      impersonator: session.impersonator,
-    });
-
-    const { user } = session;
-
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (debug) {
+      console.log('transcripts route before withAuth');
     }
+    session = await withAuth();
+    if (debug) {
+      console.log('transcripts route session', {
+        hasUser: Boolean(session?.user),
+        sessionId: session?.sessionId,
+        organizationId: session?.organizationId,
+        role: session?.role,
+        roles: session?.roles,
+        permissions: session?.permissions,
+      });
+    }
+
+    if (!session?.user) {
+      const payload = { error: 'Unauthorized' };
+      const response = Response.json(payload, { status: 401 });
+      logResponse('unauthorized', response, payload);
+      return response;
+    }
+    const { user } = session;
 
     // Parse pagination parameters
     const { searchParams } = new URL(request.url);
@@ -57,10 +73,10 @@ export async function GET(request: NextRequest) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      return Response.json(
-        { error: 'Database configuration missing' },
-        { status: 500 },
-      );
+      const payload = { error: 'Database configuration missing' };
+      const response = Response.json(payload, { status: 500 });
+      logResponse('missing-db-config', response, payload);
+      return response;
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -91,6 +107,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { count, error: countError } = await countQuery;
+    console.log('transcripts route count result', {
+      count,
+      countError,
+    });
 
     // Get paginated results
     const { data, error } = await baseQuery
@@ -99,69 +119,41 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Database error:', error);
-      return Response.json(
-        { error: 'Failed to fetch transcripts' },
-        { status: 500 },
-      );
+      const payload = { error: 'Failed to fetch transcripts' };
+      const response = Response.json(payload, { status: 500 });
+      logResponse('query-error', response, payload);
+      return response;
     }
 
-    const canShareTranscripts = session.role !== 'member';
-
-    if (canShareTranscripts && user.email && data && data.length > 0) {
-      const rules = await getEnabledTeamTranscriptRulesByUserEmail({
-        userEmail: user.email,
-      });
-
-      if (rules.length > 0) {
-        for (const transcript of data) {
-          const topic = extractTopicFromSummary(transcript.summary ?? '');
-          if (!topic) continue;
-
-          for (const rule of rules) {
-            if (rule.type !== 'summary_topic_exact') continue;
-
-            if (topic.toLowerCase() === rule.value.trim().toLowerCase()) {
-              await shareTranscriptToTeam({
-                teamId: rule.teamId,
-                transcriptId: transcript.id,
-                createdByEmail: user.email,
-              });
-            }
-          }
-        }
-      }
-    }
-
-    const sharedTeamMap = new Map<number, Array<string>>();
+    const canCurrentUserShareTranscripts = canManageTranscriptAccess(
+      session.role,
+    );
     let sharedTranscriptIds = new Set<number>();
 
     if (user.email) {
-      const [teamShares, directShares] = await Promise.all([
-        getSharedTranscriptTeamsByUserEmail({ userEmail: user.email }),
+      const [directShares] = await Promise.all([
         getDirectlySharedTranscriptIdsByUserEmail({ userEmail: user.email }),
       ]);
-
-      for (const share of teamShares) {
-        const names = sharedTeamMap.get(share.transcriptId);
-        if (names) {
-          names.push(share.teamName);
-        } else {
-          sharedTeamMap.set(share.transcriptId, [share.teamName]);
-        }
-      }
-
-      const teamShareIds = teamShares.map((share) => share.transcriptId);
-      sharedTranscriptIds = new Set([...teamShareIds, ...directShares]);
+      sharedTranscriptIds = new Set(directShares);
     }
+
+    const transcriptIds = (data ?? []).map((row) => row.id);
+    const accessSummaries = await getTranscriptAccessSummaries({
+      transcriptIds,
+    });
+    const accessByTranscriptId = new Map(
+      accessSummaries.map((summary) => [summary.transcriptId, summary]),
+    );
 
     const items = (data ?? []).map((row) => ({
       ...row,
       can_view_full_content:
-        canShareTranscripts || sharedTranscriptIds.has(row.id),
-      shared_in_teams: sharedTeamMap.get(row.id) ?? [],
+        canCurrentUserShareTranscripts || sharedTranscriptIds.has(row.id),
+      shared_with_emails:
+        accessByTranscriptId.get(row.id)?.sharedWithEmails ?? [],
     }));
 
-    return Response.json({
+    const payload = {
       data: items,
       pagination: {
         page,
@@ -171,9 +163,22 @@ export async function GET(request: NextRequest) {
         hasNext: page < Math.ceil((count || 0) / limit),
         hasPrev: page > 1,
       },
-    });
+    };
+    const response = Response.json(payload);
+    logResponse('success', response, payload);
+    return response;
   } catch (error) {
     console.error('API error:', error);
-    return Response.json({ error: 'Internal server error' }, { status: 500 });
+    if (debug) {
+      console.log('transcripts route session on error', {
+        hasSession: Boolean(session),
+        hasUser: Boolean(session?.user),
+        sessionId: session?.sessionId,
+      });
+    }
+    const payload = { error: 'Internal server error' };
+    const response = Response.json(payload, { status: 500 });
+    logResponse('catch', response, payload);
+    return response;
   }
 }
