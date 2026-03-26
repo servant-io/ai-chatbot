@@ -2,8 +2,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { isTranscriptSharedWithUserEmail } from '@/lib/db/queries';
+import { toNativeResponse } from '@/lib/server/next-response';
 
-export async function GET(
+export const runtime = 'nodejs';
+
+async function handleGET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -106,4 +109,9 @@ export async function GET(
       { status: 500 },
     );
   }
+}
+
+export async function GET(...args: Parameters<typeof handleGET>) {
+  const response = await handleGET(...args);
+  return toNativeResponse(response);
 }

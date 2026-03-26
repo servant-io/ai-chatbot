@@ -2,12 +2,13 @@ import type { NextRequest } from 'next/server';
 import { withAuth } from '@workos-inc/authkit-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { getDirectlySharedTranscriptIdsByUserEmail } from '@/lib/db/queries';
+import { toNativeResponse } from '@/lib/server/next-response';
 import { canManageTranscriptAccess } from '@/lib/transcripts/access';
 import { getTranscriptAccessSummaries } from '@/lib/transcripts/access-management';
 
 export const runtime = 'nodejs';
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const debug = process.env.TRANSCRIPTS_DEBUG === '1';
   const logResponse = (
     label: string,
@@ -181,4 +182,9 @@ export async function GET(request: NextRequest) {
     logResponse('catch', response, payload);
     return response;
   }
+}
+
+export async function GET(...args: Parameters<typeof handleGET>) {
+  const response = await handleGET(...args);
+  return toNativeResponse(response);
 }
